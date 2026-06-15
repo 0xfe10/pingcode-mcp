@@ -749,7 +749,7 @@ export class WorkItemService {
 
   async searchWorkItems(options: SearchWorkItemsOptions) {
     const updatedBetween = buildUpdatedBetween(options.updatedAfter, options.updatedBefore);
-    const byKind: { kind: WorkItemKind; total: number; pageIndex: number; pageSize: number }[] = [];
+    const byKind: { kind: WorkItemKind; total: number; pageIndex: number; pageSize: number; hasMore: boolean }[] = [];
     const values: ReturnType<typeof summarizeWorkItem>[] = [];
     const seenIds = new Set<string>();
 
@@ -785,7 +785,8 @@ export class WorkItemService {
         pageIndex: options.pageIndex,
         pageSize: options.pageSize,
       });
-      byKind.push({ kind, total: page.total, pageIndex: page.page_index, pageSize: page.page_size });
+      const hasMore = page.total > (page.page_index + 1) * page.page_size;
+      byKind.push({ kind, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, hasMore });
       // raw typeIds 可能让多个 kind 命中同一条工作项，按 id 去重避免重复计入。
       for (const item of page.values) {
         if (seenIds.has(item.id)) continue;
@@ -795,7 +796,11 @@ export class WorkItemService {
     }
 
     const total = byKind.reduce((sum, entry) => sum + entry.total, 0);
-    return { total, byKind, values };
+    const truncated = byKind.some(entry => entry.hasMore);
+    const note = truncated
+      ? "结果超过一页，请用 pageIndex/pageSize 翻页或收紧过滤条件后重新查询。"
+      : undefined;
+    return { total, truncated, note, byKind, values };
   }
 
   async planStatusChange(options: PlanStatusChangeOptions) {
@@ -1056,6 +1061,7 @@ export class WorkItemService {
 
     const seenIds = new Set<string>();
     const items: ReturnType<typeof summarizeWorkItem>[] = [];
+    const byKind: { kind: WorkItemKind; total: number; pageIndex: number; pageSize: number; hasMore: boolean }[] = [];
     for (const kind of kinds) {
       const page = await this.list(kind, {
         assigneeNames: [assignee],
@@ -1065,6 +1071,8 @@ export class WorkItemService {
         projectIdentifier: options.projectIdentifier,
         projectId: options.projectId,
       });
+      const hasMore = page.total > (page.page_index + 1) * page.page_size;
+      byKind.push({ kind, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, hasMore });
       for (const item of page.values) {
         if (seenIds.has(item.id)) continue;
         seenIds.add(item.id);
@@ -1085,7 +1093,12 @@ export class WorkItemService {
       items: groupItems,
     }));
 
-    return { assigneeName: assignee, total: items.length, groups };
+    const truncated = byKind.some(entry => entry.hasMore);
+    const note = truncated
+      ? "结果超过一页，请用 pageSize 调大或收紧 stateNames/时间范围后重新查询。"
+      : undefined;
+
+    return { assigneeName: assignee, total: items.length, truncated, note, byKind, groups };
   }
 
   async buildPayload(

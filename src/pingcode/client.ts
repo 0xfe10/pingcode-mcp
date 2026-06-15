@@ -29,6 +29,18 @@ export class PingCodeApiError extends Error {
     super(message);
     this.name = "PingCodeApiError";
   }
+
+  /** 序列化时只暴露 name/message/status，绝不输出原始响应体（可能含 token/secret）。 */
+  toJSON(): { name: string; message: string; status: number } {
+    return { name: this.name, message: this.message, status: this.status };
+  }
+
+  /** 对任意文本做脱敏：打码 access_token/refresh_token/client_secret/code 的值与 Bearer 令牌。 */
+  static mask(text: string): string {
+    return text
+      .replace(/("?(access_token|refresh_token|client_secret|code)"?\s*[:=]\s*"?)[^"&\s,}]+/gi, "$1***")
+      .replace(/Bearer\s+[A-Za-z0-9._-]+/g, "Bearer ***");
+  }
 }
 
 type QueryValue = string | number | boolean | undefined;
@@ -231,35 +243,76 @@ export class PingCodeClient {
       }
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    // 最多两轮：首轮命中 401 且能重新鉴权时刷新令牌并重试一次，避免令牌过期导致整次失败。
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
-    try {
-      const response = await fetch(url, {
-        method,
-        signal: controller.signal,
-        headers: {
-          Authorization: await this.getAuthorization(),
-          Accept: "application/json",
-          ...(options.body == null ? {} : { "Content-Type": "application/json" }),
-        },
-        body: options.body == null ? undefined : JSON.stringify(options.body),
-      });
+      try {
+        const response = await fetch(url, {
+          method,
+          signal: controller.signal,
+          headers: {
+            Authorization: await this.getAuthorization(),
+            Accept: "application/json",
+            ...(options.body == null ? {} : { "Content-Type": "application/json" }),
+          },
+          body: options.body == null ? undefined : JSON.stringify(options.body),
+        });
 
-      const text = await response.text();
-      if (!response.ok) {
-        throw new PingCodeApiError(`PingCode API 请求失败：${response.status} ${response.statusText}`, response.status, text);
+        if (!response.ok && response.status === 401 && attempt === 0 && (await this.reauthorizeAfter401())) {
+          continue;
+        }
+
+        const text = await response.text();
+        if (!response.ok) {
+          throw new PingCodeApiError(`PingCode API 请求失败：${response.status} ${response.statusText}`, response.status, text);
+        }
+        if (!text) return undefined as T;
+        return JSON.parse(text) as T;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          throw new Error(`PingCode API 请求超时：${method} ${path}`);
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
       }
-      if (!text) return undefined as T;
-      return JSON.parse(text) as T;
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new Error(`PingCode API 请求超时：${method} ${path}`);
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
     }
+
+    // for 循环理论上不会走到这里（最多一次 continue 后必定返回或抛错）。
+    throw new Error(`PingCode API 请求未完成：${method} ${path}`);
+  }
+
+  /**
+   * 401 后尝试重新鉴权，供 request 重试一次：
+   * - 有用户态 refresh_token：强制刷新并持久化，成功返回 true。
+   * - 否则有 client_credentials：清掉进程内缓存，下次 getAuthorization 会重新换取，返回 true。
+   * - 都不行：返回 false（由调用方按原逻辑抛 401）。
+   */
+  private async reauthorizeAfter401(): Promise<boolean> {
+    const refreshToken = this.authStore?.get()?.refreshToken;
+    if (refreshToken) {
+      try {
+        const refreshed = await this.refreshUserToken(refreshToken);
+        this.authStore?.update({
+          accessToken: refreshed.access_token,
+          tokenType: refreshed.token_type ?? "Bearer",
+          expiresAt: normalizeExpiresAt(refreshed.expires_in),
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    if (this.config.clientId && this.config.clientSecret) {
+      this.cachedAuthorization = undefined;
+      this.cachedAuthorizationExpiresAt = 0;
+      return true;
+    }
+
+    return false;
   }
 
   private async getAuthorization(): Promise<string> {
