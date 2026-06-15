@@ -22,6 +22,9 @@ PingCode MCP 是一个公司内部可复用的 MCP Server，用于让 Cursor / C
 - 给缺陷/需求追加评论，或在标记已修复时顺带评论。
 - 修改单个需求状态。
 - 查询项目 schema：工作项类型、状态、优先级、成员。
+- 获取单条工作项完整详情（描述/图片/时间/父项/属性/可选评论）。
+- 统一搜索缺陷+需求（状态/优先级/负责人/关键词/更新时间范围/分页）。
+- 只读预览状态变更计划；安全编辑字段；一句话分诊（triage）。
 
 ## 安装
 
@@ -177,6 +180,11 @@ Client ID / Client Secret 请去 PingCode 右上角头像 -> 管理后台 -> 凭
 | `pingcode_add_work_item_comment` | 给缺陷/需求追加评论，默认 dry-run |
 | `pingcode_list_work_item_comments` | 获取缺陷/需求评论列表 |
 | `pingcode_update_requirement_status` | 修改单个需求状态 |
+| `pingcode_get_work_item` | 按编号或工作项 ID 获取单条详情（描述/图片/时间/父项/属性，可选评论） |
+| `pingcode_search_work_items` | 统一搜索缺陷+需求，支持状态/优先级/负责人/关键词/更新时间范围/分页 |
+| `pingcode_plan_status_change` | 只读返回状态变更计划（当前/目标/可用状态/保护条件），永不执行 |
+| `pingcode_update_work_item_fields` | 安全编辑字段（标题/描述/优先级/负责人/父项/属性），默认 dry-run |
+| `pingcode_triage_work_item` | 组合分诊：改负责人+优先级+状态+评论，默认 dry-run |
 
 ## 表格模板
 
@@ -251,6 +259,96 @@ Client ID / Client Secret 请去 PingCode 右上角头像 -> 管理后台 -> 凭
 
 PingCode 评论资源使用 `principal_type=work_item` 和工作项 ID 绑定。若 `Client Credentials` 写评论返回权限不足，需要在 PingCode 后台确认评论写入权限，或改用支持用户身份的授权方式。
 
+## 闭环工作台用法
+
+新增 5 个工具把 pingcode-mcp 从"动作集合"升级为"研发日常闭环"。所有写工具默认 `dryRun=true`：AI 先回计划，确认后再带 `dryRun:false` 执行。
+
+### 看详情
+
+```text
+看一下 MYM-455 的详情，把评论也带上
+```
+
+对应 `pingcode_get_work_item`（`includeComments=true`），返回完整描述、图片地址、创建/更新时间、父项、自定义属性与评论。
+
+### 统一搜索
+
+```text
+搜本周更新过的、状态是已修复的缺陷和需求
+```
+
+对应 `pingcode_search_work_items`，一次跨缺陷+需求搜索，支持 `stateNames` / `priorityNames` / `assigneeNames` / `keywords` / `updatedAfter` / `updatedBefore` / 分页。`updatedAfter` / `updatedBefore` 映射为 PingCode 服务端 `updated_between` 过滤。
+
+### 先看流转计划再改
+
+```text
+MYM-455 想改成已验收，先给我看会发生什么
+```
+
+对应 `pingcode_plan_status_change`，**只读**返回当前状态、目标状态、该类型可用状态列表、`expectedCurrentStatusName` 是否满足。确认后再走写工具。
+
+### 安全编辑字段
+
+先 dry-run：
+
+```json
+{ "identifier": "MYM-455", "priorityName": "最高", "assigneeName": "张夏", "dryRun": true }
+```
+
+对应 `pingcode_update_work_item_fields`，返回字段级 diff（仅变化的字段进入 PATCH）。确认后传 `dryRun:false`。字段无变化时 `noChange=true` 自动跳过写入；`expectedCurrentStatusName` 不匹配则拒绝。
+
+### 一句话分诊（triage）
+
+```json
+{ "identifier": "MYM-455", "assigneeName": "张夏", "statusName": "处理中", "expectedCurrentStatusName": "新提交", "comment": "【接单】已接手处理，开始排查。", "dryRun": true }
+```
+
+对应 `pingcode_triage_work_item`，把改负责人 + 改优先级 + 改状态合并为一次 PATCH，再追加评论。`expectedCurrentStatusName` 不匹配则整单拒绝、不部分执行。
+
+## triage 评论模板
+
+供 `comment` 字段直接复制，`{}` 为占位变量，按上下文填充：
+
+| 动作 | 模板 |
+| --- | --- |
+| 接单（→ 处理中） | `【接单】已接手处理，开始排查。当前优先级：{优先级}。预计跟进方向：{初步判断}。` |
+| 处理中（开始定位） | `【处理中】已复现（环境：{环境}）。初步定位：{根因方向}。后续将{修复方案}。` |
+| 修复待回归（→ 已修复） | `【待回归】已修复并自测通过。根因：{根因}。改动点：{涉及模块/提交}。验证方式：{回归步骤}。请 QA 回归。` |
+| 需求进入开发（→ 开发中） | `【进入开发】需求已认领并启动开发。技术方案：{方案要点}。预计提测节点：{节点}。` |
+| 回归打回（→ 处理中） | `【打回】回归未通过。环境：{环境}。问题表现：{现象}。已退回处理中，请重新跟进。` |
+
+## Roadmap
+
+以下能力尚未实现，仅作规划，欢迎按需推进。
+
+### P1
+
+- changelog / 变更历史工具（PingCode `transition_histories` 仅状态流转、`activities` 标"开发中"，响应字段未文档化，需实测后再做）。
+- saved filters（本地保存常用搜索条件，如"我的待回归"）。
+- JQL-like 查询 DSL（降级到现有结构化参数）。
+- 导出 Markdown / CSV / JSON 工具。
+- 图片安全下载工具（受控目录/大小，过滤外链）。
+- AI prompt 模板工具（评论/周报/triage）。
+- 批量改字段（沿用 `mark_bugs_fixed` 的 planned/skipped/failed 模式）。
+
+### P2
+
+- webhook / 增量同步（PingCode Open API **不提供 webhook**，只能用 `updated_between` 轮询游标降级实现）。
+- 本地 cache（缓存 schema：类型/状态/优先级/成员，TTL 失效）。
+- 重复缺陷识别。
+- 周报生成。
+- 权限诊断（探测当前 token 对写操作的实际权限）。
+- MCP audit log 可视化。
+
+## 能力边界与降级说明
+
+不要把 Jira 的概念硬套到 PingCode：
+
+- **状态流转无工作流校验**：PingCode 没有 Jira 式 transition 执行 + 合法性校验端点。`pingcode_plan_status_change` 只能展示当前/目标/可用状态，**不保证目标转换被工作流允许**，实际 PATCH 可能被后端拒绝。
+- **无乐观锁版本号**：PingCode 工作项无 version/etag。本工具用 `expectedCurrentStatusName` + 写前比对（字段无变化跳过）做弱幂等，并发覆盖风险无法从 API 层根治。
+- **identifier 与内部 ID 不同**：单条详情端点按内部 ID 寻址；传 identifier 时会先解析为内部 ID 再取详情。
+- **评论富文本/图片**：评论 `content` 格式未文档化，建议按纯文本传入；`public_image_token` 在 Client Credentials 下常返回 null，图片只解析 `imageSources` URL，二进制下载进 Roadmap。
+
 ## 安全策略
 
 - `client_secret` 和 token 只从环境变量读取。
@@ -258,6 +356,8 @@ PingCode 评论资源使用 `principal_type=work_item` 和工作项 ID 绑定。
 - 导入默认 `dryRun=true`。
 - `PINGCODE_READONLY=true` 时禁止创建和更新。
 - 批量状态更新默认 `dryRun=true`，并支持当前状态保护。
+- 新增写工具 `pingcode_update_work_item_fields` / `pingcode_triage_work_item` 默认 `dryRun=true`，写前统一经过 `assertWritable`，`PINGCODE_READONLY=true` 时拒绝。
+- 错误只返回 message，不回传 PingCode 原始响应体、token 或 `client_secret`。
 
 ## 发布到 mcp.so
 
