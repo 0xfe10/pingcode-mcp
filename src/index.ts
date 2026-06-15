@@ -13,10 +13,14 @@ import {
   getCurrentTeamSchema,
   getCurrentUserSchema,
   getTeamMembersSchema,
+  getMyWorkSchema,
   getWorkItemSchema,
+  linkWorkItemsSchema,
+  listWorkItemRelationsSchema,
   planStatusChangeSchema,
   searchWorkItemsSchema,
   triageWorkItemSchema,
+  unlinkWorkItemsSchema,
   updateWorkItemFieldsSchema,
 } from "./tools/schemas.js";
 import { buildSetupGuide } from "./tools/setupGuide.js";
@@ -537,6 +541,76 @@ server.registerTool(
   async args => {
     try {
       const result = await service.triageWorkItem({ ...args, kind: args.kind ?? "bug" });
+      return textResult({ ok: true, ...result });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_get_my_work",
+  {
+    title: "Get My PingCode Work",
+    description:
+      "聚合当前负责人的缺陷与需求并按状态分组（每组带计数、按工作项 ID 去重）。支持 assigneeName 覆盖默认负责人、状态与更新时间过滤。只读。",
+    inputSchema: getMyWorkSchema,
+  },
+  async args => {
+    try {
+      const result = await service.getMyWork(args);
+      return textResult({ ok: true, ...result });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_link_work_items",
+  {
+    title: "Link PingCode Work Items",
+    description:
+      "在两个工作项间建立关系（阻塞/被阻塞/重复/关联/依赖等）。relationType 支持系统枚举或自定义关系类型名/ID。默认 dryRun=true，仅返回计划。",
+    inputSchema: linkWorkItemsSchema,
+  },
+  async args => {
+    try {
+      const result = await service.linkWorkItems({ ...args, kind: args.kind ?? "bug" });
+      return textResult({ ok: true, ...result });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_unlink_work_items",
+  {
+    title: "Unlink PingCode Work Items",
+    description: "按 relationId 删除工作项的某条关系；relationId 来自 pingcode_list_work_item_relations。默认 dryRun=true。",
+    inputSchema: unlinkWorkItemsSchema,
+  },
+  async args => {
+    try {
+      const result = await service.unlinkWorkItems({ ...args, kind: args.kind ?? "bug" });
+      return textResult({ ok: true, ...result });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_list_work_item_relations",
+  {
+    title: "List PingCode Work Item Relations",
+    description: "按编号或工作项 ID 列出工作项的全部关系（可按 relationType 过滤），返回每条关系的 id 与目标工作项。",
+    inputSchema: listWorkItemRelationsSchema,
+  },
+  async args => {
+    try {
+      const result = await service.listWorkItemRelations({ ...args, kind: args.kind ?? "bug" });
       return textResult({ ok: true, ...result });
     } catch (error) {
       return errorResult(error);

@@ -133,6 +133,21 @@ export interface WorkItemStateFlow {
   to_state?: { id: string; name?: string };
 }
 
+export interface RelationType {
+  id: string;
+  name?: string;
+  category?: string;
+  is_system?: boolean;
+  [k: string]: unknown;
+}
+
+export interface WorkItemRelation {
+  id: string;
+  relation_type?: string;
+  target_work_item?: PingCodeRef;
+  [k: string]: unknown;
+}
+
 export interface WorkItemListQuery {
   identifier?: string;
   project_ids?: string;

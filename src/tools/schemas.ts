@@ -130,6 +130,50 @@ export const updateWorkItemFieldsSchema = {
   ...projectScope,
 };
 
+export const getMyWorkSchema = {
+  assigneeName: z.string().optional().describe("覆盖 PINGCODE_DEFAULT_ASSIGNEE_NAME 的负责人姓名（负责人列显示的展示名）。"),
+  kinds: z
+    .array(z.enum(["bug", "requirement"]))
+    .min(1)
+    .default(["bug", "requirement"])
+    .optional()
+    .describe("要聚合的工作项类型，默认同时统计缺陷和需求。"),
+  stateNames: z.array(z.string()).optional().describe("状态名称列表，按各类型分别解析过滤。"),
+  updatedAfter: z.string().optional().describe("更新时间下界（ISO 或 yyyy-MM-dd），映射为服务端 updated_between 起点。"),
+  updatedBefore: z.string().optional().describe("更新时间上界（ISO 或 yyyy-MM-dd），映射为服务端 updated_between 终点。"),
+  pageSize: z.number().int().min(1).max(100).default(30).optional(),
+  ...projectScope,
+};
+
+export const linkWorkItemsSchema = {
+  kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("源工作项类型，默认 bug。"),
+  ...workItemLocator,
+  targetIdentifier: z.string().optional().describe("目标工作项编号，如 MYM-456。"),
+  targetWorkItemId: z.string().optional().describe("目标工作项内部 ID，提供后优先于 targetIdentifier。"),
+  relationType: z
+    .string()
+    .describe(
+      "关系类型。系统枚举：block/blocked_by/relate/duplicate/cause/caused_by/clone/cloned_by/dependency/mention（block=源阻塞目标、blocked_by=源被目标阻塞）；也可传自定义关系类型名/ID。",
+    ),
+  dryRun: z.boolean().default(true).optional().describe("默认 true，仅返回建立关系计划；传 false 才真正创建。"),
+  ...projectScope,
+};
+
+export const unlinkWorkItemsSchema = {
+  kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("源工作项类型，默认 bug。"),
+  ...workItemLocator,
+  relationId: z.string().describe("要删除的关系 ID（必填），来自 pingcode_list_work_item_relations。"),
+  dryRun: z.boolean().default(true).optional().describe("默认 true，仅返回删除关系计划；传 false 才真正删除。"),
+  ...projectScope,
+};
+
+export const listWorkItemRelationsSchema = {
+  kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("工作项类型，默认 bug。"),
+  ...workItemLocator,
+  relationType: z.string().optional().describe("按关系类型过滤（系统枚举或自定义关系类型名/ID）。"),
+  ...projectScope,
+};
+
 export const triageWorkItemSchema = {
   kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("工作项类型，默认 bug。"),
   ...workItemLocator,

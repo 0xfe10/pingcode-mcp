@@ -222,6 +222,48 @@ export interface ListTeamMembersOptions {
   pageSize?: number;
 }
 
+export interface LinkWorkItemsOptions {
+  kind: WorkItemKind;
+  workItemId?: string;
+  identifier?: string;
+  targetWorkItemId?: string;
+  targetIdentifier?: string;
+  relationType: string;
+  dryRun?: boolean;
+  projectIdentifier?: string;
+  projectId?: string;
+}
+
+export interface UnlinkWorkItemsOptions {
+  kind: WorkItemKind;
+  workItemId?: string;
+  identifier?: string;
+  relationId: string;
+  dryRun?: boolean;
+  projectIdentifier?: string;
+  projectId?: string;
+}
+
+export interface ListWorkItemRelationsOptions {
+  kind: WorkItemKind;
+  workItemId?: string;
+  identifier?: string;
+  relationType?: string;
+  projectIdentifier?: string;
+  projectId?: string;
+}
+
+export interface GetMyWorkOptions {
+  assigneeName?: string;
+  kinds?: WorkItemKind[];
+  stateNames?: string[];
+  updatedAfter?: string;
+  updatedBefore?: string;
+  pageSize?: number;
+  projectIdentifier?: string;
+  projectId?: string;
+}
+
 /** 当前用户结果：用户态返回真实用户；应用态（client_credentials）降级返回配置的默认负责人。 */
 export type CurrentUserResult =
   | { mode: "user"; user: PingCodeUser }
@@ -242,6 +284,19 @@ const TYPE_NAME_CANDIDATES: Record<WorkItemKind, string[]> = {
   bug: ["缺陷", "bug", "BUG"],
   requirement: ["需求", "用户故事", "story", "requirement"],
 };
+
+const SYSTEM_RELATION_TYPES = [
+  "block",
+  "blocked_by",
+  "relate",
+  "duplicate",
+  "cause",
+  "caused_by",
+  "clone",
+  "cloned_by",
+  "dependency",
+  "mention",
+];
 
 export class WorkItemService {
   private readonly client: PingCodeClient;
@@ -888,6 +943,111 @@ export class WorkItemService {
     return { dryRun: result.dryRun, plan, executed: result.executed };
   }
 
+  async linkWorkItems(options: LinkWorkItemsOptions) {
+    const schema = await this.getKindSchema(options.kind, {
+      projectIdentifier: options.projectIdentifier,
+      projectId: options.projectId,
+    });
+    const item = await this.resolveWorkItemStrict(options.workItemId, options.identifier, schema);
+    const targetWorkItemId =
+      options.targetWorkItemId ??
+      (options.targetIdentifier ? (await this.findByIdentifier(options.targetIdentifier, schema.project.id))?.id : undefined);
+    if (!targetWorkItemId) throw new Error("未找到目标工作项，请提供 targetWorkItemId 或可解析的 targetIdentifier。");
+    const relationType = await this.resolveRelationType(options.relationType);
+
+    const plan = { source: summarizeWorkItem(item, this.config.baseUrl), targetWorkItemId, relationType };
+
+    const result = await this.runMutation(options.dryRun ?? true, async () => ({
+      plan,
+      noChange: false,
+      execute: async () => ({
+        created: await this.client.createWorkItemRelation(item.id, {
+          target_work_item_id: targetWorkItemId,
+          relation_type: relationType,
+        }),
+      }),
+    }));
+
+    return { dryRun: result.dryRun, plan, created: result.executed?.created };
+  }
+
+  async unlinkWorkItems(options: UnlinkWorkItemsOptions) {
+    const schema = await this.getKindSchema(options.kind, {
+      projectIdentifier: options.projectIdentifier,
+      projectId: options.projectId,
+    });
+    const item = await this.resolveWorkItemStrict(options.workItemId, options.identifier, schema);
+
+    const plan = { source: summarizeWorkItem(item, this.config.baseUrl), relationId: options.relationId };
+
+    const result = await this.runMutation(options.dryRun ?? true, async () => ({
+      plan,
+      noChange: false,
+      execute: async () => ({ deleted: await this.client.deleteWorkItemRelation(item.id, options.relationId) }),
+    }));
+
+    return { dryRun: result.dryRun, plan, deleted: result.executed?.deleted };
+  }
+
+  async listWorkItemRelations(options: ListWorkItemRelationsOptions) {
+    const schema = await this.getKindSchema(options.kind, {
+      projectIdentifier: options.projectIdentifier,
+      projectId: options.projectId,
+    });
+    const item = await this.resolveWorkItemStrict(options.workItemId, options.identifier, schema);
+    const relationType = options.relationType ? await this.resolveRelationType(options.relationType) : undefined;
+    const page = await this.client.listWorkItemRelations(item.id, relationType);
+    return {
+      target: summarizeWorkItem(item, this.config.baseUrl),
+      total: page.total,
+      values: page.values,
+    };
+  }
+
+  async getMyWork(options: GetMyWorkOptions) {
+    const assignee = options.assigneeName?.trim() || this.config.defaultAssigneeName;
+    if (!assignee) {
+      throw new Error(
+        "缺少默认负责人。请提供 assigneeName（负责人列显示的展示名），或在 MCP env 中设置 PINGCODE_DEFAULT_ASSIGNEE_NAME。",
+      );
+    }
+    const kinds = options.kinds ?? ["bug", "requirement"];
+    const updatedBetween = buildUpdatedBetween(options.updatedAfter, options.updatedBefore);
+
+    const seenIds = new Set<string>();
+    const items: ReturnType<typeof summarizeWorkItem>[] = [];
+    for (const kind of kinds) {
+      const page = await this.list(kind, {
+        assigneeNames: [assignee],
+        stateNames: options.stateNames,
+        updatedBetween,
+        pageSize: options.pageSize,
+        projectIdentifier: options.projectIdentifier,
+        projectId: options.projectId,
+      });
+      for (const item of page.values) {
+        if (seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
+        items.push(summarizeWorkItem(item, this.config.baseUrl));
+      }
+    }
+
+    const groupMap = new Map<string, ReturnType<typeof summarizeWorkItem>[]>();
+    for (const item of items) {
+      const status = item.state ?? "未分组";
+      const bucket = groupMap.get(status);
+      if (bucket) bucket.push(item);
+      else groupMap.set(status, [item]);
+    }
+    const groups = [...groupMap.entries()].map(([status, groupItems]) => ({
+      status,
+      count: groupItems.length,
+      items: groupItems,
+    }));
+
+    return { assigneeName: assignee, total: items.length, groups };
+  }
+
   async buildPayload(
     kind: WorkItemKind,
     row: {
@@ -937,6 +1097,25 @@ export class WorkItemService {
       throw new Error(`未找到 ${kind} 工作项类型，可用类型：${types.map(type => `${type.name}(${type.id})`).join(", ")}`);
     }
     return found;
+  }
+
+  /** 系统枚举直接用；否则按关系类型 id/name/category 解析为 id；解析失败或无匹配回退原值。 */
+  private async resolveRelationType(input: string): Promise<string> {
+    const norm = normalizeName(input);
+    if (SYSTEM_RELATION_TYPES.includes(norm)) return norm;
+    try {
+      const types = await this.client.getRelationTypes();
+      const match = types.find(
+        type =>
+          normalizeName(type.id) === norm ||
+          (type.name !== undefined && normalizeName(type.name) === norm) ||
+          (type.category !== undefined && normalizeName(type.category) === norm),
+      );
+      if (match) return match.id;
+    } catch {
+      // 关系类型枚举不可用时回退原值，交由服务端校验。
+    }
+    return input;
   }
 
   private namesToIds<T extends { id: string; name?: string }>(names: string[] | undefined, values: T[], label: string): string[] {

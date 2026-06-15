@@ -7,10 +7,12 @@ import type {
   PingCodeTeam,
   PingCodeUser,
   ProjectMember,
+  RelationType,
   WorkItem,
   WorkItemListQuery,
   WorkItemPayload,
   WorkItemPriority,
+  WorkItemRelation,
   WorkItemState,
   WorkItemStateFlow,
   WorkItemStatePlan,
@@ -154,6 +156,31 @@ export class PingCodeClient {
   async bulkUpdateWorkItems(ids: string[], propertyName: string, propertyValue: string): Promise<void> {
     const body: BulkUpdatePayload = { ids, property_name: propertyName, property_value: propertyValue };
     await this.request("PATCH", "/v1/project/work_items", { body });
+  }
+
+  async getRelationTypes(): Promise<RelationType[]> {
+    const page = await this.request<PageResponse<RelationType>>("GET", "/v1/project/work_item/relation_types");
+    return page.values;
+  }
+
+  async listWorkItemRelations(workItemId: string, relationType?: string): Promise<PageResponse<WorkItemRelation>> {
+    return this.request("GET", `/v1/project/work_items/${encodeURIComponent(workItemId)}/relations`, {
+      query: { relation_type: relationType },
+    });
+  }
+
+  async createWorkItemRelation(
+    workItemId: string,
+    body: { target_work_item_id: string; relation_type: string },
+  ): Promise<WorkItemRelation> {
+    return this.request("POST", `/v1/project/work_items/${encodeURIComponent(workItemId)}/relations`, { body });
+  }
+
+  async deleteWorkItemRelation(workItemId: string, relationId: string): Promise<unknown> {
+    return this.request(
+      "DELETE",
+      `/v1/project/work_items/${encodeURIComponent(workItemId)}/relations/${encodeURIComponent(relationId)}`,
+    );
   }
 
   async listWorkItemComments(workItemId: string): Promise<PageResponse<PingCodeComment>> {
