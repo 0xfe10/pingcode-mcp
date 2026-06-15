@@ -1,3 +1,6 @@
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import type { PingCodeConfig } from "../config.js";
 
 interface SetupField {
@@ -23,6 +26,49 @@ function configured(value: string | undefined): string {
 
 function safeCurrent(value: string | undefined): string {
   return value ? value : "未配置";
+}
+
+interface McpServerConfig {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+interface NextStep {
+  code: "configure_credentials" | "configure_project" | "authorize";
+  title: string;
+  detail: string;
+  actions: string[];
+}
+
+/** 运行时定位 dist/index.js 绝对路径，供本地源码方式的 MCP 配置直接复制。 */
+function resolveServerEntry(): string {
+  try {
+    return resolve(dirname(fileURLToPath(import.meta.url)), "..", "index.js");
+  } catch {
+    return "/ABSOLUTE_PATH/pingcode-mcp/dist/index.js";
+  }
+}
+
+function valueOrPlaceholder(value: string | undefined, placeholders: string[], fallback: string): string {
+  return value && !placeholders.some(placeholder => value.includes(placeholder)) ? value : fallback;
+}
+
+/** 构造可复制 MCP 配置的 env：非敏感项回填当前值，凭据一律占位（不外泄 secret）。 */
+function buildConfigEnv(config: PingCodeConfig): Record<string, string> {
+  const env: Record<string, string> = {
+    PINGCODE_BASE_URL: valueOrPlaceholder(config.baseUrl, ["your-domain"], "https://your-domain.pingcode.com"),
+    PINGCODE_API_BASE_URL: config.apiBaseUrl || "https://open.pingcode.com",
+    PINGCODE_CLIENT_ID: "<在此填写 Client ID，勿提交 Git>",
+    PINGCODE_CLIENT_SECRET: "<在此填写 Client Secret，勿提交 Git>",
+    PINGCODE_PROJECT_IDENTIFIER: valueOrPlaceholder(config.projectIdentifier, ["PROJECT_KEY"], "PROJECT_KEY"),
+    PINGCODE_OAUTH_REDIRECT_URI: config.oauthRedirectUri || "<与 PingCode 后台凭据管理一致的回调地址>",
+    PINGCODE_OAUTH_AUTHORIZE_URL: config.oauthAuthorizeUrl || "https://your-domain.pingcode.com/oauth2/authorize",
+  };
+  if (config.defaultAssigneeName) {
+    env.PINGCODE_DEFAULT_ASSIGNEE_NAME = config.defaultAssigneeName;
+  }
+  return env;
 }
 
 export function buildSetupGuide(config: PingCodeConfig) {
@@ -142,10 +188,56 @@ export function buildSetupGuide(config: PingCodeConfig) {
     ],
   };
 
+  const needsProject = isPlaceholder(config.projectIdentifier, ["PROJECT_KEY"]);
+  const configEnv = buildConfigEnv(config);
+  const mcpClientConfig = {
+    note: "把其中一种配置块粘进你的 MCP 客户端配置（Claude Code / Cursor 等），填好 Client ID / Client Secret 后重启会话即可使用。凭据只填本地、勿提交 Git；本输出已对凭据打码。",
+    npmPackage: {
+      mcpServers: { pingcode: { command: "npx", args: ["-y", "@succaiss/pingcode-mcp"], env: configEnv } as McpServerConfig },
+    },
+    localSource: {
+      mcpServers: { pingcode: { command: "node", args: [resolveServerEntry()], env: configEnv } as McpServerConfig },
+    },
+  };
+
+  const nextStep: NextStep =
+    needsClientId || needsClientSecret
+      ? {
+          code: "configure_credentials",
+          title: "配置应用凭据并连接 MCP",
+          detail:
+            "在 PingCode 后台「凭据管理」新建应用拿到 Client ID / Client Secret，填进下方 mcpClientConfig 的 env，保存后重启 MCP 会话。",
+          actions: [
+            "复制下方 mcpClientConfig（npmPackage 或 localSource）到 MCP 客户端配置",
+            "填入 Client ID / Client Secret（只填本地，勿提交 Git）",
+            "重启 MCP 会话后再次调用 pingcode_check_setup 确认",
+          ],
+        }
+      : needsProject
+        ? {
+            code: "configure_project",
+            title: "配置项目标识",
+            detail: "在 env 里填写 PINGCODE_PROJECT_IDENTIFIER（项目地址 /pjm/projects/XXX/ 里的 XXX），保存后重启 MCP 会话。",
+            actions: ["在 mcpClientConfig 的 env 填写 PINGCODE_PROJECT_IDENTIFIER", "重启 MCP 会话"],
+          }
+        : {
+            code: "authorize",
+            title: "完成用户授权（推荐）",
+            detail:
+              "凭据与项目已就绪。调用 pingcode_auth_login 走浏览器授权后即可用你本人身份使用，且无需手填默认负责人；可用 pingcode_auth_status 查看是否已授权。未授权时仍可用 client_credentials（应用身份）。",
+            actions: [
+              "调用 pingcode_auth_login（不传 code）拿授权 URL",
+              "浏览器登录授权后，从回调地址复制 code",
+              "再次调用 pingcode_auth_login 并传入 code 完成登录",
+            ],
+          };
+
   return {
     ok: missingFields.length === 0,
     needsInput: missingFields.length > 0,
     authMode: usesAccessToken ? "access_token" : hasClientCredentials ? "client_credentials" : "missing",
+    nextStep,
+    mcpClientConfig,
     missingFields,
     fields,
     userOauth,
