@@ -3,6 +3,8 @@ import { assertWritable } from "../config.js";
 import type {
   PageResponse,
   PingCodeProject,
+  PingCodeTeam,
+  PingCodeUser,
   ProjectMember,
   WorkItem,
   WorkItemPayload,
@@ -30,6 +32,26 @@ export interface ListOptions {
   stateNames?: string[];
   priorityNames?: string[];
   assigneeNames?: string[];
+  projectIds?: string[];
+  typeIds?: string[];
+  parentIds?: string[];
+  assigneeIds?: string[];
+  stateIds?: string[];
+  priorityIds?: string[];
+  tagIds?: string[];
+  sprintIds?: string[];
+  boardIds?: string[];
+  entryIds?: string[];
+  swimlaneIds?: string[];
+  phaseIds?: string[];
+  versionIds?: string[];
+  createdByIds?: string[];
+  participantId?: string;
+  createdBetween?: string;
+  startBetween?: string;
+  endBetween?: string;
+  includeDeleted?: boolean;
+  includeArchived?: boolean;
   keywords?: string;
   updatedBetween?: string;
   includePublicImageToken?: boolean;
@@ -125,6 +147,26 @@ export interface SearchWorkItemsOptions {
   assigneeNames?: string[];
   updatedAfter?: string;
   updatedBefore?: string;
+  projectIds?: string[];
+  typeIds?: string[];
+  parentIds?: string[];
+  assigneeIds?: string[];
+  stateIds?: string[];
+  priorityIds?: string[];
+  tagIds?: string[];
+  sprintIds?: string[];
+  boardIds?: string[];
+  entryIds?: string[];
+  swimlaneIds?: string[];
+  phaseIds?: string[];
+  versionIds?: string[];
+  createdByIds?: string[];
+  participantId?: string;
+  createdBetween?: string;
+  startBetween?: string;
+  endBetween?: string;
+  includeDeleted?: boolean;
+  includeArchived?: boolean;
   pageIndex?: number;
   pageSize?: number;
   projectIdentifier?: string;
@@ -173,6 +215,23 @@ export interface TriageWorkItemOptions {
   projectId?: string;
 }
 
+export interface ListTeamMembersOptions {
+  keywords?: string;
+  departmentIds?: string[];
+  pageIndex?: number;
+  pageSize?: number;
+}
+
+/** 当前用户结果：用户态返回真实用户；应用态（client_credentials）降级返回配置的默认负责人。 */
+export type CurrentUserResult =
+  | { mode: "user"; user: PingCodeUser }
+  | {
+      mode: "application";
+      note: string;
+      defaultAssigneeName: string | null;
+      resolved?: PingCodeUser;
+    };
+
 interface FieldChange {
   field: string;
   from: unknown;
@@ -211,6 +270,62 @@ export class WorkItemService {
     return { project, type, types, states, priorities, members };
   }
 
+  async getCurrentTeam(): Promise<PingCodeTeam> {
+    return this.client.getCurrentTeam();
+  }
+
+  /**
+   * 当前用户：仅当配置了 accessToken（用户态）才尝试 /v1/myself。
+   * 应用态（client_credentials）下 PingCode 无当前登录用户，降级返回配置的默认负责人并尽量从企业成员里解析。
+   * 整段 try/catch 包裹，绝不抛错。
+   */
+  async getCurrentUser(): Promise<CurrentUserResult> {
+    if (this.config.accessToken) {
+      try {
+        const user = await this.client.getCurrentUser();
+        return { mode: "user", user };
+      } catch {
+        // 用户令牌不可用时落到应用态降级，不抛错。
+      }
+    }
+
+    const defaultAssigneeName = this.config.defaultAssigneeName ?? null;
+    const base = {
+      mode: "application" as const,
+      note: "当前为应用身份(client_credentials)，PingCode 无当前登录用户；以下为 MCP 配置的默认负责人。",
+      defaultAssigneeName,
+    };
+
+    if (!defaultAssigneeName) return base;
+
+    try {
+      const page = await this.client.listEnterpriseUsers({ keywords: defaultAssigneeName, page_size: 5 });
+      const normalized = normalizeName(defaultAssigneeName);
+      const resolved = page.values.find(user =>
+        [user.display_name, user.name].some(value => value && normalizeName(value) === normalized),
+      );
+      return resolved ? { ...base, resolved } : base;
+    } catch {
+      return base;
+    }
+  }
+
+  async listTeamMembers(options: ListTeamMembersOptions = {}) {
+    const departmentIds = options.departmentIds?.slice(0, 20).join(",") || undefined;
+    const page = await this.client.listEnterpriseUsers({
+      keywords: options.keywords,
+      department_ids: departmentIds,
+      page_index: options.pageIndex,
+      page_size: options.pageSize,
+    });
+    return {
+      total: page.total,
+      pageIndex: page.page_index,
+      pageSize: page.page_size,
+      values: page.values,
+    };
+  }
+
   async list(kind: WorkItemKind, options: ListOptions = {}): Promise<PageResponse<WorkItem>> {
     const schema = await this.getKindSchema(kind, options);
     const stateIds = this.namesToIds(options.stateNames, schema.states, "状态");
@@ -218,17 +333,43 @@ export class WorkItemService {
     const assigneeIds = this.memberNamesToIds(options.assigneeNames, schema.members);
 
     return this.client.listWorkItems({
-      project_ids: schema.project.id,
-      type_ids: schema.type.id,
-      state_ids: stateIds.join(",") || undefined,
-      priority_ids: priorityIds.join(",") || undefined,
-      assignee_ids: assigneeIds.join(",") || undefined,
+      project_ids: this.merge([schema.project.id], options.projectIds),
+      type_ids: this.merge([schema.type.id], options.typeIds),
+      state_ids: this.merge(stateIds, options.stateIds),
+      priority_ids: this.merge(priorityIds, options.priorityIds),
+      assignee_ids: this.merge(assigneeIds, options.assigneeIds),
+      parent_ids: this.joinCap(options.parentIds),
+      tag_ids: this.joinCap(options.tagIds),
+      sprint_ids: this.joinCap(options.sprintIds),
+      board_ids: this.joinCap(options.boardIds),
+      entry_ids: this.joinCap(options.entryIds),
+      swimlane_ids: this.joinCap(options.swimlaneIds),
+      phase_ids: this.joinCap(options.phaseIds),
+      version_ids: this.joinCap(options.versionIds),
+      created_by_ids: this.joinCap(options.createdByIds),
+      participant_id: options.participantId,
+      created_between: options.createdBetween,
+      start_between: options.startBetween,
+      end_between: options.endBetween,
+      include_deleted: options.includeDeleted,
+      include_archived: options.includeArchived,
       keywords: options.keywords,
       updated_between: options.updatedBetween,
       include_public_image_token: options.includePublicImageToken,
       page_index: options.pageIndex,
       page_size: options.pageSize,
     });
+  }
+
+  /** 去重 + 去空 + 截断 ≤20 + 逗号拼接；空则 undefined。 */
+  private joinCap(arr?: string[]): string | undefined {
+    const values = [...new Set((arr ?? []).filter(Boolean))].slice(0, 20);
+    return values.length ? values.join(",") : undefined;
+  }
+
+  /** 名称解析出的 id 与 raw id 合并去重，再走 joinCap。 */
+  private merge(resolved: string[], raw?: string[]): string | undefined {
+    return this.joinCap([...resolved, ...(raw ?? [])]);
   }
 
   async findByIdentifier(identifier: string, projectId?: string, typeId?: string): Promise<WorkItem | undefined> {
@@ -515,6 +656,7 @@ export class WorkItemService {
     const updatedBetween = buildUpdatedBetween(options.updatedAfter, options.updatedBefore);
     const byKind: { kind: WorkItemKind; total: number; pageIndex: number; pageSize: number }[] = [];
     const values: ReturnType<typeof summarizeWorkItem>[] = [];
+    const seenIds = new Set<string>();
 
     for (const kind of options.kinds) {
       const page = await this.list(kind, {
@@ -524,12 +666,35 @@ export class WorkItemService {
         stateNames: options.stateNames,
         priorityNames: options.priorityNames,
         assigneeNames: options.assigneeNames,
+        projectIds: options.projectIds,
+        typeIds: options.typeIds,
+        parentIds: options.parentIds,
+        assigneeIds: options.assigneeIds,
+        stateIds: options.stateIds,
+        priorityIds: options.priorityIds,
+        tagIds: options.tagIds,
+        sprintIds: options.sprintIds,
+        boardIds: options.boardIds,
+        entryIds: options.entryIds,
+        swimlaneIds: options.swimlaneIds,
+        phaseIds: options.phaseIds,
+        versionIds: options.versionIds,
+        createdByIds: options.createdByIds,
+        participantId: options.participantId,
+        createdBetween: options.createdBetween,
+        startBetween: options.startBetween,
+        endBetween: options.endBetween,
+        includeDeleted: options.includeDeleted,
+        includeArchived: options.includeArchived,
         updatedBetween,
         pageIndex: options.pageIndex,
         pageSize: options.pageSize,
       });
       byKind.push({ kind, total: page.total, pageIndex: page.page_index, pageSize: page.page_size });
+      // raw typeIds 可能让多个 kind 命中同一条工作项，按 id 去重避免重复计入。
       for (const item of page.values) {
+        if (seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
         values.push(summarizeWorkItem(item, this.config.baseUrl));
       }
     }

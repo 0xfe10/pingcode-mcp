@@ -12,6 +12,17 @@ export const workItemLocator = {
   identifier: z.string().optional().describe("工作项编号，如 MYM-455。"),
 };
 
+export const getCurrentTeamSchema = {};
+
+export const getCurrentUserSchema = {};
+
+export const getTeamMembersSchema = {
+  keywords: z.string().optional().describe("按姓名/邮箱等关键字过滤企业成员。"),
+  departmentIds: z.array(z.string()).optional().describe("部门 ID 列表，≤20，多个为「任一部门」。"),
+  pageIndex: z.number().int().min(0).default(0).optional(),
+  pageSize: z.number().int().min(1).max(100).default(30).optional(),
+};
+
 export const getWorkItemSchema = {
   kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("工作项类型，默认 bug。"),
   ...workItemLocator,
@@ -37,6 +48,26 @@ export const searchWorkItemsSchema = {
   assigneeNames: z.array(z.string()).optional().describe("负责人姓名列表。"),
   updatedAfter: z.string().optional().describe("更新时间下界（ISO 或 yyyy-MM-dd），映射为服务端 updated_between 起点。"),
   updatedBefore: z.string().optional().describe("更新时间上界（ISO 或 yyyy-MM-dd），映射为服务端 updated_between 终点。"),
+  projectIds: z.array(z.string()).optional().describe("项目 ID 列表（raw），与项目标识解析结果合并去重，≤20。"),
+  typeIds: z.array(z.string()).optional().describe("工作项类型 ID 列表（raw），与 kind 解析结果合并去重，≤20。"),
+  parentIds: z.array(z.string()).optional().describe("父工作项 ID 列表（raw），≤20。"),
+  assigneeIds: z.array(z.string()).optional().describe("负责人 ID 列表（raw），与 assigneeNames 解析结果合并去重，≤20。"),
+  stateIds: z.array(z.string()).optional().describe("状态 ID 列表（raw），与 stateNames 解析结果合并去重，≤20。"),
+  priorityIds: z.array(z.string()).optional().describe("优先级 ID 列表（raw），与 priorityNames 解析结果合并去重，≤20。"),
+  tagIds: z.array(z.string()).optional().describe("标签 ID 列表（raw），≤20。"),
+  sprintIds: z.array(z.string()).optional().describe("迭代 ID 列表（raw），≤20。"),
+  boardIds: z.array(z.string()).optional().describe("看板 ID 列表（raw），≤20。"),
+  entryIds: z.array(z.string()).optional().describe("入口 ID 列表（raw），≤20。"),
+  swimlaneIds: z.array(z.string()).optional().describe("泳道 ID 列表（raw），≤20。"),
+  phaseIds: z.array(z.string()).optional().describe("阶段 ID 列表（raw），≤20。"),
+  versionIds: z.array(z.string()).optional().describe("版本 ID 列表（raw），≤20。"),
+  createdByIds: z.array(z.string()).optional().describe("创建人 ID 列表（raw），≤20。"),
+  participantId: z.string().optional().describe("参与人 ID（raw，单值）。"),
+  createdBetween: z.string().optional().describe("创建时间范围，秒级时间戳 起,止，支持单边，如 1700000000, 或 ,1700000000。"),
+  startBetween: z.string().optional().describe("开始时间范围，秒级时间戳 起,止，支持单边，如 1700000000, 或 ,1700000000。"),
+  endBetween: z.string().optional().describe("结束时间范围，秒级时间戳 起,止，支持单边，如 1700000000, 或 ,1700000000。"),
+  includeDeleted: z.boolean().optional().describe("是否包含已删除工作项，默认 false。"),
+  includeArchived: z.boolean().optional().describe("是否包含已归档工作项，默认 false。"),
   pageIndex: z.number().int().min(0).default(0).optional(),
   pageSize: z.number().int().min(1).max(100).default(30).optional(),
   ...projectScope,

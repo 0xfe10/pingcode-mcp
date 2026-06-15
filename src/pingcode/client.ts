@@ -4,6 +4,8 @@ import type {
   PageResponse,
   PingCodeComment,
   PingCodeProject,
+  PingCodeTeam,
+  PingCodeUser,
   ProjectMember,
   WorkItem,
   WorkItemListQuery,
@@ -48,6 +50,18 @@ export class PingCodeClient {
         include_deleted: false,
       },
     });
+  }
+
+  async getCurrentTeam(): Promise<PingCodeTeam> {
+    return this.request<PingCodeTeam>("GET", "/v1/directory/team");
+  }
+
+  async getCurrentUser(): Promise<PingCodeUser> {
+    return this.request<PingCodeUser>("GET", "/v1/myself");
+  }
+
+  async listEnterpriseUsers(query: Record<string, QueryValue>): Promise<PageResponse<PingCodeUser>> {
+    return this.request<PageResponse<PingCodeUser>>("GET", "/v1/directory/users", { query });
   }
 
   async resolveProject(projectIdentifier?: string, projectId?: string): Promise<PingCodeProject> {

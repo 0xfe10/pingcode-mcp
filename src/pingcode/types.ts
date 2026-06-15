@@ -22,6 +22,20 @@ export interface PingCodeProject {
   type?: string;
 }
 
+export interface PingCodeTeam {
+  id: string;
+  name?: string;
+  [k: string]: unknown;
+}
+
+export interface PingCodeUser {
+  id: string;
+  name?: string;
+  display_name?: string;
+  email?: string;
+  [k: string]: unknown;
+}
+
 export interface WorkItemType {
   id: string;
   url?: string;
@@ -126,8 +140,23 @@ export interface WorkItemListQuery {
   state_ids?: string;
   assignee_ids?: string;
   priority_ids?: string;
+  parent_ids?: string;
+  tag_ids?: string;
+  sprint_ids?: string;
+  board_ids?: string;
+  entry_ids?: string;
+  swimlane_ids?: string;
+  phase_ids?: string;
+  version_ids?: string;
+  created_by_ids?: string;
+  participant_id?: string;
   keywords?: string;
   updated_between?: string;
+  created_between?: string;
+  start_between?: string;
+  end_between?: string;
+  include_deleted?: boolean;
+  include_archived?: boolean;
   include_public_image_token?: boolean;
   page_index?: number;
   page_size?: number;

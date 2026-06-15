@@ -10,6 +10,9 @@ import { importWorkItems } from "./tools/importWorkItems.js";
 import {
   bulkUpdateWorkItemsSchema,
   createWorkItemSchema,
+  getCurrentTeamSchema,
+  getCurrentUserSchema,
+  getTeamMembersSchema,
   getWorkItemSchema,
   planStatusChangeSchema,
   searchWorkItemsSchema,
@@ -129,6 +132,58 @@ server.registerTool(
         typeId: args.typeId,
       });
       return textResult({ ok: true, schema });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_get_current_team",
+  {
+    title: "Get PingCode Current Team",
+    description: "获取当前 PingCode 企业/团队信息（只读）。",
+    inputSchema: getCurrentTeamSchema,
+  },
+  async () => {
+    try {
+      const team = await service.getCurrentTeam();
+      return textResult({ ok: true, team });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_get_current_user",
+  {
+    title: "Get PingCode Current User",
+    description:
+      "获取当前用户（只读）。应用身份(client_credentials)下 PingCode 无登录用户，自动降级返回配置的默认负责人。",
+    inputSchema: getCurrentUserSchema,
+  },
+  async () => {
+    try {
+      const result = await service.getCurrentUser();
+      return textResult({ ok: true, ...result });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_get_team_members",
+  {
+    title: "List PingCode Team Members",
+    description: "查询企业成员列表（只读），支持关键字与部门 ID（≤20）过滤、分页。",
+    inputSchema: getTeamMembersSchema,
+  },
+  async args => {
+    try {
+      const result = await service.listTeamMembers(args);
+      return textResult({ ok: true, ...result });
     } catch (error) {
       return errorResult(error);
     }
@@ -388,7 +443,8 @@ server.registerTool(
   "pingcode_search_work_items",
   {
     title: "Search PingCode Work Items",
-    description: "跨缺陷与需求统一搜索，支持关键字、状态、优先级、负责人与更新时间范围过滤，返回合并结果与各类型总数。",
+    description:
+      "跨缺陷与需求统一搜索：支持关键字、状态/优先级/负责人（按名称）与更新时间范围；并支持 raw 过滤——项目/类型/父项/负责人/状态/优先级/标签/迭代/看板/入口/泳道/阶段/版本/创建人 ID 列表（≤20，与对应 name 合并去重）、participantId 单值、createdBetween/startBetween/endBetween 秒级时间戳、includeDeleted/includeArchived 布尔。返回按 id 去重的合并结果与各类型总数。",
     inputSchema: searchWorkItemsSchema,
   },
   async args => {
