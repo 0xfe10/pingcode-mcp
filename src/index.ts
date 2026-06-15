@@ -4,10 +4,15 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { loadConfig } from "./config.js";
+import { AuthService } from "./pingcode/authService.js";
+import { AuthStore } from "./pingcode/authStore.js";
 import { summarizeWorkItem, WorkItemService } from "./pingcode/workItemService.js";
 import { errorResult, textResult } from "./tools/format.js";
 import { importWorkItems } from "./tools/importWorkItems.js";
 import {
+  authLoginSchema,
+  authLogoutSchema,
+  authStatusSchema,
   bulkUpdateWorkItemsSchema,
   createWorkItemSchema,
   getCurrentTeamSchema,
@@ -26,7 +31,9 @@ import {
 import { buildSetupGuide } from "./tools/setupGuide.js";
 
 const config = loadConfig();
-const service = new WorkItemService(config);
+const authStore = new AuthStore(config.authTokenPath);
+const service = new WorkItemService(config, authStore);
+const authService = new AuthService(config, authStore);
 
 const server = new McpServer({
   name: "pingcode-mcp",
@@ -178,6 +185,74 @@ server.registerTool(
 );
 
 server.registerTool(
+  "pingcode_auth_login",
+  {
+    title: "PingCode User Login (OAuth)",
+    description:
+      "用户态浏览器授权登录。不传 code：返回授权 URL 与引导，请去浏览器打开并登录授权，再从回调地址复制 code 回来；传 code：用授权码换取并保存用户令牌（0600 本地文件），返回当前用户。不读取浏览器 cookie/storage，不要把网页登录 token 贴进聊天。",
+    inputSchema: authLoginSchema,
+  },
+  async args => {
+    try {
+      if (!args.code) {
+        const { url, state } = authService.buildAuthorizeUrl();
+        return textResult({
+          ok: true,
+          step: "authorize",
+          authorizeUrl: url,
+          state,
+          instructions: [
+            "1. 在浏览器中打开 authorizeUrl，使用你本人的 PingCode 账号登录并授权。",
+            "2. 授权后浏览器会跳转到回调地址，从地址栏复制其中的 code 参数。",
+            "3. 再次调用本工具并传入 code 完成登录。",
+            "注意：本工具不读取浏览器 cookie/localStorage，请勿把网页登录的 token 贴进聊天。",
+          ],
+        });
+      }
+
+      const { user } = await authService.loginWithCode(args.code);
+      return textResult({ ok: true, step: "logged_in", user });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_auth_status",
+  {
+    title: "PingCode Auth Status",
+    description: "查询当前鉴权状态：模式（user / env-token / application）、是否已授权、相对过期秒数、当前用户。不返回任何 token。",
+    inputSchema: authStatusSchema,
+  },
+  async () => {
+    try {
+      const status = await authService.status();
+      return textResult({ ok: true, ...status });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_auth_logout",
+  {
+    title: "PingCode Auth Logout",
+    description: "清除本地保存的用户态 token（删除 0600 token 文件）。",
+    inputSchema: authLogoutSchema,
+  },
+  async () => {
+    try {
+      const result = authService.logout();
+      return textResult(result);
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
   "pingcode_get_team_members",
   {
     title: "List PingCode Team Members",
@@ -266,7 +341,7 @@ server.registerTool(
   },
   async args => {
     try {
-      const assigneeName = resolveDefaultAssigneeName(args.assigneeName);
+      const assigneeName = await service.resolveCurrentAssigneeName(args.assigneeName);
       const page = await service.list("bug", { ...args, assigneeNames: [assigneeName] });
       return textResult({
         ok: true,
@@ -291,7 +366,7 @@ server.registerTool(
   },
   async args => {
     try {
-      const assigneeName = resolveDefaultAssigneeName(args.assigneeName);
+      const assigneeName = await service.resolveCurrentAssigneeName(args.assigneeName);
       const page = await service.list("requirement", { ...args, assigneeNames: [assigneeName] });
       return textResult({
         ok: true,
@@ -628,13 +703,3 @@ main().catch(error => {
   console.error(`[pingcode-mcp] ${message}`);
   process.exit(1);
 });
-
-function resolveDefaultAssigneeName(override?: string): string {
-  const assigneeName = override?.trim() || config.defaultAssigneeName;
-  if (!assigneeName) {
-    throw new Error(
-      "缺少默认负责人。请在聊天框提供你的 PingCode 展示名（负责人列显示的名字），或在 MCP env 中设置 PINGCODE_DEFAULT_ASSIGNEE_NAME。可先调用 pingcode_check_setup 查看去哪里找。",
-    );
-  }
-  return assigneeName;
-}

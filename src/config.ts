@@ -1,3 +1,6 @@
+import os from "node:os";
+import path from "node:path";
+
 import "dotenv/config";
 
 export interface PingCodeConfig {
@@ -7,6 +10,9 @@ export interface PingCodeConfig {
   clientId?: string;
   clientSecret?: string;
   authScheme: string;
+  oauthAuthorizeUrl?: string;
+  oauthRedirectUri?: string;
+  authTokenPath: string;
   projectIdentifier: string;
   projectId?: string;
   defaultAssigneeName?: string;
@@ -42,6 +48,10 @@ export function loadConfig(): PingCodeConfig {
   );
   const apiBaseUrl = trimTrailingSlash(process.env.PINGCODE_API_BASE_URL ?? "https://open.pingcode.com");
 
+  const configHome = readOptional(process.env.XDG_CONFIG_HOME) ?? path.join(os.homedir(), ".config");
+  const authTokenPath =
+    readOptional(process.env.PINGCODE_AUTH_TOKEN_PATH) ?? path.join(configHome, "pingcode-mcp", "auth.json");
+
   return {
     baseUrl,
     apiBaseUrl,
@@ -49,6 +59,9 @@ export function loadConfig(): PingCodeConfig {
     clientId: readOptional(process.env.PINGCODE_CLIENT_ID),
     clientSecret: readOptional(process.env.PINGCODE_CLIENT_SECRET),
     authScheme: readOptional(process.env.PINGCODE_AUTH_SCHEME) ?? "Bearer",
+    oauthAuthorizeUrl: readOptional(process.env.PINGCODE_OAUTH_AUTHORIZE_URL) ?? `${baseUrl}/oauth2/authorize`,
+    oauthRedirectUri: readOptional(process.env.PINGCODE_OAUTH_REDIRECT_URI),
+    authTokenPath,
     projectIdentifier: process.env.PINGCODE_PROJECT_IDENTIFIER ?? "PROJECT_KEY",
     projectId: readOptional(process.env.PINGCODE_PROJECT_ID),
     defaultAssigneeName: readOptional(process.env.PINGCODE_DEFAULT_ASSIGNEE_NAME),

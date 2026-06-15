@@ -1,4 +1,5 @@
 import type { PingCodeConfig } from "../config.js";
+import type { AuthStore } from "./authStore.js";
 import type {
   BulkUpdatePayload,
   PageResponse,
@@ -34,15 +35,31 @@ type QueryValue = string | number | boolean | undefined;
 
 interface TokenResponse {
   access_token?: string;
+  refresh_token?: string;
   token_type?: string;
   expires_in?: number;
 }
+
+/** 用户态 token 缺省有效期（30 天），仅在 token 响应未带 expires_in 时兜底。 */
+const DEFAULT_USER_TOKEN_TTL_SECONDS = 30 * 24 * 3600;
+
+/** expires_in 归一为绝对毫秒时间戳：大于 1e9 视为已是秒级绝对时间戳，否则按相对秒数推算。 */
+export function normalizeExpiresAt(expiresIn: number | undefined): number {
+  const seconds = expiresIn ?? DEFAULT_USER_TOKEN_TTL_SECONDS;
+  return seconds > 1e9 ? seconds * 1000 : Date.now() + seconds * 1000;
+}
+
+/** token 端点响应类型别名：access_token 必定存在，其余字段可选。 */
+export type TokenExchangeResult = Required<Pick<TokenResponse, "access_token">> & TokenResponse;
 
 export class PingCodeClient {
   private cachedAuthorization?: string;
   private cachedAuthorizationExpiresAt = 0;
 
-  constructor(private readonly config: PingCodeConfig) {}
+  constructor(
+    private readonly config: PingCodeConfig,
+    private readonly authStore?: AuthStore,
+  ) {}
 
   async listProjects(identifier?: string): Promise<PageResponse<PingCodeProject>> {
     return this.request("GET", "/v1/project/projects", {
@@ -246,10 +263,18 @@ export class PingCodeClient {
   }
 
   private async getAuthorization(): Promise<string> {
+    // 1. 用户态 token（authStore）：未过期直接用；过期且有 refresh_token 则刷新；无过期时间则尽力用之。
+    const userAuthorization = await this.tryUserAuthorization();
+    if (userAuthorization) {
+      return userAuthorization;
+    }
+
+    // 2. 环境变量 access_token。
     if (this.config.accessToken) {
       return this.buildAuthorization(this.config.authScheme, this.config.accessToken, "PINGCODE_ACCESS_TOKEN");
     }
 
+    // 3. client_credentials（带进程内缓存）。
     if (this.cachedAuthorization && Date.now() < this.cachedAuthorizationExpiresAt) {
       return this.cachedAuthorization;
     }
@@ -268,11 +293,84 @@ export class PingCodeClient {
     return authorization;
   }
 
-  private async requestClientCredentialsToken(): Promise<Required<Pick<TokenResponse, "access_token">> & TokenResponse> {
+  /**
+   * 尝试用 authStore 里的用户态 token 构造 Authorization。
+   * - 有效（距过期 >60s）：直接用。
+   * - 已过期且有 refresh_token：刷新并持久化新 token；刷新失败返回 undefined 由调用方落到下一级。
+   * - 无过期时间：best-effort 直接用。
+   * - 无 authStore / 无 token：返回 undefined。
+   */
+  private async tryUserAuthorization(): Promise<string | undefined> {
+    const stored = this.authStore?.get();
+    if (!stored?.accessToken) {
+      return undefined;
+    }
+
+    const scheme = stored.tokenType || "Bearer";
+
+    if (stored.expiresAt === undefined) {
+      return this.buildAuthorization(scheme, stored.accessToken, "PingCode 用户令牌");
+    }
+
+    if (Date.now() < stored.expiresAt - 60000) {
+      return this.buildAuthorization(scheme, stored.accessToken, "PingCode 用户令牌");
+    }
+
+    if (stored.refreshToken) {
+      try {
+        const refreshed = await this.refreshUserToken(stored.refreshToken);
+        const updated = this.authStore?.update({
+          accessToken: refreshed.access_token,
+          tokenType: refreshed.token_type ?? stored.tokenType,
+          expiresAt: normalizeExpiresAt(refreshed.expires_in),
+        });
+        const nextScheme = updated?.tokenType || scheme;
+        const nextToken = updated?.accessToken ?? refreshed.access_token;
+        return this.buildAuthorization(nextScheme, nextToken, "PingCode 用户令牌");
+      } catch {
+        // 刷新失败：落到下一级鉴权，不抛错。
+        return undefined;
+      }
+    }
+
+    return undefined;
+  }
+
+  private async requestClientCredentialsToken(): Promise<TokenExchangeResult> {
+    return this.tokenRequest({
+      grant_type: "client_credentials",
+      client_id: this.config.clientId ?? "",
+      client_secret: this.config.clientSecret ?? "",
+    });
+  }
+
+  /** 用授权码换用户态 token（authorization_code）。需要 client_id/secret。 */
+  async exchangeAuthorizationCode(code: string): Promise<TokenExchangeResult> {
+    if (!this.config.clientId || !this.config.clientSecret) {
+      throw new Error("缺少 PINGCODE_CLIENT_ID / PINGCODE_CLIENT_SECRET，无法用授权码换取用户令牌。");
+    }
+    return this.tokenRequest({
+      grant_type: "authorization_code",
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+      code,
+    });
+  }
+
+  /** 用 refresh_token 刷新用户态 access_token（refresh_token 响应可能不返回新 refresh_token）。 */
+  async refreshUserToken(refreshToken: string): Promise<TokenExchangeResult> {
+    return this.tokenRequest({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    });
+  }
+
+  /** /v1/auth/token 统一 GET + query 请求；不打印任何 token。 */
+  private async tokenRequest(query: Record<string, string>): Promise<TokenExchangeResult> {
     const url = new URL(`${this.config.apiBaseUrl}/v1/auth/token`);
-    url.searchParams.set("grant_type", "client_credentials");
-    url.searchParams.set("client_id", this.config.clientId ?? "");
-    url.searchParams.set("client_secret", this.config.clientSecret ?? "");
+    for (const [key, value] of Object.entries(query)) {
+      url.searchParams.set(key, value);
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
@@ -295,7 +393,7 @@ export class PingCodeClient {
       if (!token.access_token) {
         throw new Error("PingCode Token 响应缺少 access_token。");
       }
-      return token as Required<Pick<TokenResponse, "access_token">> & TokenResponse;
+      return token as TokenExchangeResult;
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
         throw new Error("PingCode Token 请求超时。");

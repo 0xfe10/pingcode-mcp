@@ -16,6 +16,17 @@ export const getCurrentTeamSchema = {};
 
 export const getCurrentUserSchema = {};
 
+export const authLoginSchema = {
+  code: z
+    .string()
+    .optional()
+    .describe("浏览器授权回调 URL 中的 code 参数；不传则返回授权 URL 与引导。"),
+};
+
+export const authStatusSchema = {};
+
+export const authLogoutSchema = {};
+
 export const getTeamMembersSchema = {
   keywords: z.string().optional().describe("按姓名/邮箱等关键字过滤企业成员。"),
   departmentIds: z.array(z.string()).optional().describe("部门 ID 列表，≤20，多个为「任一部门」。"),

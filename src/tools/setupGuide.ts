@@ -90,13 +90,14 @@ export function buildSetupGuide(config: PingCodeConfig) {
     {
       env: "PINGCODE_DEFAULT_ASSIGNEE_NAME",
       label: "默认负责人展示名",
-      status: config.defaultAssigneeName ? "ok" : "missing",
-      requiredFor: "我的缺陷 / 我的需求",
+      status: config.defaultAssigneeName ? "ok" : hasClientCredentials ? "optional" : "missing",
+      requiredFor: "我的缺陷 / 我的需求（未走浏览器授权时必填）",
       safeForChat: true,
       current: safeCurrent(config.defaultAssigneeName),
       example: "张夏",
       whereToFind: "看 PingCode 右上角头像/个人信息里的展示名，或缺陷/需求列表负责人列里显示的名字。",
-      chatPrompt: "请提供你的 PingCode 展示名，也就是负责人列里显示的名字。",
+      chatPrompt:
+        "请提供你的 PingCode 展示名（负责人列里显示的名字）；或改用 pingcode_auth_login 浏览器授权，授权后会自动识别你本人，无需手填。",
     },
     {
       env: "PINGCODE_BUG_TYPE_ID",
@@ -126,12 +127,28 @@ export function buildSetupGuide(config: PingCodeConfig) {
   const safeQuestions = missingFields.filter(field => field.safeForChat).map(field => field.chatPrompt);
   const secretQuestions = missingFields.filter(field => !field.safeForChat).map(field => field.chatPrompt);
 
+  const userOauth = {
+    available: hasClientCredentials,
+    recommended: hasClientCredentials && !config.defaultAssigneeName,
+    note: hasClientCredentials
+      ? "已配置 Client ID/Secret，推荐调用 pingcode_auth_login 走浏览器授权登录：授权后会自动识别你本人，无需手填 PINGCODE_DEFAULT_ASSIGNEE_NAME。授权 token 仅保存到本地 0600 文件。"
+      : "尚未配置 Client ID/Secret，无法使用浏览器授权登录。",
+    securityNote:
+      "本工具不读取浏览器 cookie / localStorage / sessionStorage，也不要把网页登录的 token 贴进聊天；只会用授权回调里的 code 换取并本地保存令牌。",
+    steps: [
+      "1. 调用 pingcode_auth_login（不传 code），拿到授权 URL。",
+      "2. 浏览器打开授权 URL，用本人账号登录授权，从回调地址复制 code。",
+      "3. 再次调用 pingcode_auth_login 并传入 code 完成登录。",
+    ],
+  };
+
   return {
     ok: missingFields.length === 0,
     needsInput: missingFields.length > 0,
     authMode: usesAccessToken ? "access_token" : hasClientCredentials ? "client_credentials" : "missing",
     missingFields,
     fields,
+    userOauth,
     chatBoxGuide: {
       safeQuestions,
       secretSetupSteps: secretQuestions,

@@ -12,6 +12,7 @@ import type {
   WorkItemState,
   WorkItemType,
 } from "./types.js";
+import type { AuthStore } from "./authStore.js";
 import { PingCodeClient } from "./client.js";
 
 export type WorkItemKind = "bug" | "requirement";
@@ -300,9 +301,14 @@ const SYSTEM_RELATION_TYPES = [
 
 export class WorkItemService {
   private readonly client: PingCodeClient;
+  /** 本次进程内缓存的当前用户展示名，避免重复请求 /v1/myself。 */
+  private cachedCurrentAssigneeName?: string;
 
-  constructor(private readonly config: PingCodeConfig) {
-    this.client = new PingCodeClient(config);
+  constructor(
+    private readonly config: PingCodeConfig,
+    private readonly authStore?: AuthStore,
+  ) {
+    this.client = new PingCodeClient(config, authStore);
   }
 
   async getSchema(kind?: WorkItemKind, options: { projectIdentifier?: string; projectId?: string; typeId?: string } = {}) {
@@ -330,12 +336,12 @@ export class WorkItemService {
   }
 
   /**
-   * 当前用户：仅当配置了 accessToken（用户态）才尝试 /v1/myself。
+   * 当前用户：有用户态 token（authStore）或环境变量 accessToken 时尝试 /v1/myself。
    * 应用态（client_credentials）下 PingCode 无当前登录用户，降级返回配置的默认负责人并尽量从企业成员里解析。
    * 整段 try/catch 包裹，绝不抛错。
    */
   async getCurrentUser(): Promise<CurrentUserResult> {
-    if (this.config.accessToken) {
+    if (this.authStore?.hasToken() || this.config.accessToken) {
       try {
         const user = await this.client.getCurrentUser();
         return { mode: "user", user };
@@ -363,6 +369,40 @@ export class WorkItemService {
     } catch {
       return base;
     }
+  }
+
+  /**
+   * 解析"我"对应的负责人展示名：
+   * 1. 显式 override（去空）优先。
+   * 2. 有用户态 token 时取 /v1/myself 的 display_name/name（本实例缓存）。
+   * 3. 回退 PINGCODE_DEFAULT_ASSIGNEE_NAME。
+   * 三者都没有时抛错，提示走浏览器授权或配置默认负责人。
+   */
+  async resolveCurrentAssigneeName(override?: string): Promise<string> {
+    const trimmed = override?.trim();
+    if (trimmed) return trimmed;
+
+    if (this.authStore?.hasToken()) {
+      if (this.cachedCurrentAssigneeName) return this.cachedCurrentAssigneeName;
+      try {
+        const user = await this.client.getCurrentUser();
+        const name = user.display_name || user.name;
+        if (name) {
+          this.cachedCurrentAssigneeName = name;
+          return name;
+        }
+      } catch {
+        // 用户令牌不可用时落到默认负责人。
+      }
+    }
+
+    if (this.config.defaultAssigneeName) {
+      return this.config.defaultAssigneeName;
+    }
+
+    throw new Error(
+      "缺少负责人。可调用 pingcode_auth_login 浏览器授权（自动识别你本人），或设置 PINGCODE_DEFAULT_ASSIGNEE_NAME。",
+    );
   }
 
   async listTeamMembers(options: ListTeamMembersOptions = {}) {
