@@ -26,6 +26,8 @@ PingCode MCP 是一个公司内部可复用的 MCP Server，用于让 Cursor / C
 - 统一搜索缺陷+需求（状态/优先级/负责人/关键词/更新时间范围/分页）。
 - 只读预览状态变更计划（基于工作流预检合法流转）；安全编辑字段；一句话分诊（triage）。
 - 单条创建缺陷/需求；按编号原生批量改优先级/负责人/状态。
+- 在工作项间建立/删除/查看关系（阻塞/被阻塞/重复/关联/依赖等）。
+- 个人工作台：聚合当前负责人的缺陷+需求并按状态分组。
 
 ## 安装
 
@@ -191,6 +193,10 @@ Client ID / Client Secret 请去 PingCode 右上角头像 -> 管理后台 -> 凭
 | `pingcode_triage_work_item` | 组合分诊：改负责人+优先级+状态+评论，默认 dry-run |
 | `pingcode_create_work_item` | 单条创建缺陷/需求（标题必填 + 描述/优先级/负责人/父项/属性），默认 dry-run |
 | `pingcode_bulk_update_work_items` | 按编号批量改优先级/负责人/状态（原生 bulk，≤100，planned/skipped/failed），默认 dry-run |
+| `pingcode_link_work_items` | 在两个工作项间建立关系（阻塞/被阻塞/重复/关联/依赖等），默认 dry-run |
+| `pingcode_unlink_work_items` | 按 relationId 删除工作项的某条关系（relationId 来自列关系工具），默认 dry-run |
+| `pingcode_list_work_item_relations` | 列出工作项的全部关系（可按 relationType 过滤），返回每条关系的 id 与目标 |
+| `pingcode_get_my_work` | 聚合当前负责人的缺陷+需求并按状态分组（每组带计数、按 ID 去重），只读 |
 
 ## 表格模板
 
@@ -375,6 +381,79 @@ MYM-455 想改成已验收，先给我看会发生什么
 | 需求进入开发（→ 开发中） | `【进入开发】需求已认领并启动开发。技术方案：{方案要点}。预计提测节点：{节点}。` |
 | 回归打回（→ 处理中） | `【打回】回归未通过。环境：{环境}。问题表现：{现象}。已退回处理中，请重新跟进。` |
 
+## 关系 / 依赖
+
+在工作项之间建立、删除、查看关系（阻塞 / 被阻塞 / 重复 / 关联 / 因果 / 克隆 / 依赖等）。
+
+### 方向语义
+
+关系记录在「源工作项」上，方向以源 → 目标理解：
+
+- `block`：源 **阻塞** 目标（目标要等源完成）。
+- `blocked_by`：源 **被** 目标阻塞。
+- `cause` / `caused_by`：源 **引发** 目标 / 源 **由** 目标引发。
+- `clone` / `cloned_by`：源 **克隆出** 目标 / 源 **是** 目标的克隆。
+- `relate`：双向关联。`duplicate`：源与目标重复。`dependency`：依赖。`mention`：提及。
+
+### relationType 取值
+
+- **系统枚举**（直接填）：`block` / `blocked_by` / `relate` / `duplicate` / `cause` / `caused_by` / `clone` / `cloned_by` / `dependency` / `mention`。
+- **自定义关系类型**：可直接填关系类型的名称或 ID，工具会调用 `/relation_types` 端点按 id / name / category 解析为 ID；解析失败时回退原值，交给服务端校验。
+
+### 建立关系（link）
+
+`pingcode_link_work_items` 默认 `dryRun=true`，先回计划，确认后传 `dryRun:false` 才真正创建。
+
+先 dry-run：
+
+```json
+{ "identifier": "MYM-1", "targetIdentifier": "MYM-2", "relationType": "block", "dryRun": true }
+```
+
+确认后执行（表示 MYM-1 阻塞 MYM-2）：
+
+```json
+{ "identifier": "MYM-1", "targetIdentifier": "MYM-2", "relationType": "block", "dryRun": false }
+```
+
+源工作项用 `identifier` 或 `workItemId` 定位；目标用 `targetIdentifier` 或 `targetWorkItemId`，两者都解析不到目标时报「未找到目标工作项」。
+
+### 列出关系（list）
+
+`pingcode_list_work_item_relations` 只读，返回每条关系的 `id`（删除时需要）与目标工作项，可按 `relationType` 过滤。
+
+```json
+{ "identifier": "MYM-1" }
+```
+
+### 删除关系（unlink）
+
+删除前必须先用「列出关系」拿到目标关系的 `relationId`。`pingcode_unlink_work_items` 默认 `dryRun=true`。
+
+```json
+{ "identifier": "MYM-1", "relationId": "<来自 list 的关系 id>", "dryRun": false }
+```
+
+## 个人工作台
+
+`pingcode_get_my_work` 只读：把当前负责人名下的缺陷与需求聚合起来，按状态分组返回，每组带计数，跨缺陷/需求按工作项 ID 去重。
+
+- 负责人优先用入参 `assigneeName`，缺省则回退 `PINGCODE_DEFAULT_ASSIGNEE_NAME`，两者都没有时报错。
+- `kinds` 默认 `["bug","requirement"]`；可加 `stateNames` / `updatedAfter` / `updatedBefore` / `pageSize` 过滤。
+- 返回结构：`{ assigneeName, total, groups: [{ status, count, items }] }`，无状态名的归入 `未分组`。
+
+自然语言示例：
+
+```text
+看我手上的活按状态分组
+把 MYM-1 标记为阻塞 MYM-2
+列出 MYM-1 的所有关系
+```
+
+- 「看我手上的活按状态分组」→ `pingcode_get_my_work`。
+- 「把 MYM-1 标记为阻塞 MYM-2」→ `pingcode_link_work_items`（`relationType=block`，先 dry-run 再 `dryRun:false`）。
+- 「列出 MYM-1 的所有关系」→ `pingcode_list_work_item_relations`。
+
 ## Roadmap
 
 以下能力尚未实现，仅作规划，欢迎按需推进。
@@ -387,7 +466,7 @@ MYM-455 想改成已验收，先给我看会发生什么
 - 导出 Markdown / CSV / JSON 工具。
 - 图片安全下载工具（受控目录/大小，过滤外链）。
 - AI prompt 模板工具（评论/周报/triage）。
-- 关系/依赖（blocks/duplicates/relates）、个人统一工作台、迭代/版本/标签/关注人、附件上下传（PingCode 均有原生 API，待按需实现）。
+- 迭代/版本/标签/关注人、附件上下传（PingCode 均有原生 API，待按需实现）。
 
 ### P2
 
@@ -414,7 +493,7 @@ MYM-455 想改成已验收，先给我看会发生什么
 - 导入默认 `dryRun=true`。
 - `PINGCODE_READONLY=true` 时禁止创建和更新。
 - 批量状态更新默认 `dryRun=true`，并支持当前状态保护。
-- 新增写工具 `pingcode_update_work_item_fields` / `pingcode_triage_work_item` 默认 `dryRun=true`，写前统一经过 `assertWritable`，`PINGCODE_READONLY=true` 时拒绝。
+- 新增写工具 `pingcode_update_work_item_fields` / `pingcode_triage_work_item` / `pingcode_link_work_items` / `pingcode_unlink_work_items` 默认 `dryRun=true`，写前统一经过 `assertWritable`，`PINGCODE_READONLY=true` 时拒绝。
 - 错误只返回 message，不回传 PingCode 原始响应体、token 或 `client_secret`。
 
 ## 发布到 mcp.so
