@@ -60,6 +60,10 @@ PINGCODE_CLIENT_SECRET=每个人自己的 Client Secret
 # 也可以直接填官方 Open API access_token，二选一即可
 PINGCODE_ACCESS_TOKEN=
 PINGCODE_AUTH_SCHEME=Bearer
+# 用户态 OAuth（可选）：配置 Client ID/Secret 后即可用 pingcode_auth_login 浏览器授权
+PINGCODE_OAUTH_AUTHORIZE_URL=
+PINGCODE_OAUTH_REDIRECT_URI=
+PINGCODE_AUTH_TOKEN_PATH=
 PINGCODE_PROJECT_IDENTIFIER=PROJECT_KEY
 PINGCODE_DEFAULT_ASSIGNEE_NAME=每个人自己的 PingCode 展示名
 PINGCODE_BUG_TYPE_ID=bug
@@ -67,11 +71,52 @@ PINGCODE_REQUIREMENT_TYPE_ID=
 PINGCODE_READONLY=false
 ```
 
+- `PINGCODE_OAUTH_AUTHORIZE_URL`：浏览器授权地址，缺省为 `${PINGCODE_BASE_URL}/oauth2/authorize`。
+- `PINGCODE_OAUTH_REDIRECT_URI`：授权回调地址，须与 PingCode 后台凭据管理里配置的一致。
+- `PINGCODE_AUTH_TOKEN_PATH`：用户态 token 存放路径，缺省为 `${XDG_CONFIG_HOME 或 ~/.config}/pingcode-mcp/auth.json`（文件权限 0600）。
+
 推荐使用 PingCode 后台创建的 `Client Credentials` 应用。不要提交真实 `.env`，不要把 `client_secret`、token、cookie 发到聊天里。
 
 `PINGCODE_DEFAULT_ASSIGNEE_NAME` 用于“我的缺陷 / 我的需求”工具。每个同事填自己的 PingCode 展示名，例如 `张夏`、`林勇坚`。Client Credentials 是应用身份，不代表当前登录用户，所以这里必须显式配置默认负责人。
 
 PingCode SaaS 的 Open API 地址使用 `https://open.pingcode.com`；私有化部署再按实际地址改成 `https://your-domain/open`。
+
+## 鉴权方式
+
+服务端按以下优先级选择凭据，前一级可用就不再往下走：
+
+1. **用户态 OAuth token**（最高）：`pingcode_auth_login` 浏览器授权后保存在本地 0600 文件里的用户令牌。过期且带 refresh_token 时自动刷新；刷新失败则回退下一级。代表"当前登录用户本人"，`pingcode_get_current_user` / `pingcode_list_my_bugs` / `pingcode_list_my_requirements` 会自动识别你本人，无需手填默认负责人。
+2. **`PINGCODE_ACCESS_TOKEN`**：直接配置的官方 Open API access_token。
+3. **client_credentials**：用 `PINGCODE_CLIENT_ID` + `PINGCODE_CLIENT_SECRET` 换取的应用身份 token（带进程内缓存）。应用身份没有"当前登录用户"，所以此模式下"我的工作项"需要 `PINGCODE_DEFAULT_ASSIGNEE_NAME`。
+
+## 用户授权（OAuth）
+
+需要先配置 `PINGCODE_CLIENT_ID` / `PINGCODE_CLIENT_SECRET`，并在 PingCode 后台凭据管理里设置好 `redirect_uri`。授权分两步（手动粘贴 code）：
+
+1. 调用 `pingcode_auth_login`（不传 `code`）：返回授权 URL 与引导。
+
+   ```text
+   登录 PingCode
+   ```
+
+2. 在浏览器打开授权 URL，用本人账号登录授权，从回调地址栏复制 `code`，再次调用并传入：
+
+   ```json
+   { "code": "<回调地址里的 code>" }
+   ```
+
+   成功后保存用户令牌（本地 0600 文件）并返回当前用户。
+
+辅助工具：
+
+- `pingcode_auth_status`：查看当前鉴权模式（`user` / `env-token` / `application`）、是否已授权、相对过期秒数、当前用户。**不返回任何 token。**
+- `pingcode_auth_logout`：清除本地保存的用户态 token。
+
+### 安全说明
+
+- 用户态 token / refresh_token 只写入本地文件，权限 `0600`，进程内缓存仅当前进程可见。
+- 服务端**不读取浏览器 cookie / localStorage / sessionStorage**，也**不要把网页登录的 token 贴进聊天**——只用授权回调里的 `code` 换取令牌。
+- 任何工具返回值与日志都**不包含 access token / refresh token / client_secret**；`pingcode_auth_status` 只给相对过期秒数。
 
 ## 团队使用方式
 
@@ -174,6 +219,9 @@ Client ID / Client Secret 请去 PingCode 右上角头像 -> 管理后台 -> 凭
 | `pingcode_get_project_schema` | 获取项目、类型、状态、优先级、成员 |
 | `pingcode_get_current_team` | 获取当前企业/团队信息（只读） |
 | `pingcode_get_current_user` | 获取当前用户（只读）；应用身份下自动降级为配置的默认负责人 |
+| `pingcode_auth_login` | 用户态浏览器授权登录（OAuth）；不传 code 返回授权 URL，传 code 完成登录。不返回 token |
+| `pingcode_auth_status` | 查看鉴权状态（user / env-token / application）、是否已授权、相对过期秒数、当前用户。不返回 token |
+| `pingcode_auth_logout` | 清除本地保存的用户态 token |
 | `pingcode_get_team_members` | 查询企业成员列表（只读），支持关键字 + 部门 ID（≤20）过滤、分页 |
 | `pingcode_list_bugs` | 拉取缺陷列表 |
 | `pingcode_list_requirements` | 拉取需求清单 |
