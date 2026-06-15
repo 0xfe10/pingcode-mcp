@@ -170,6 +170,9 @@ Client ID / Client Secret 请去 PingCode 右上角头像 -> 管理后台 -> 凭
 | --- | --- |
 | `pingcode_check_setup` | 检查配置并返回聊天框追问清单、信息查找位置、env 模板 |
 | `pingcode_get_project_schema` | 获取项目、类型、状态、优先级、成员 |
+| `pingcode_get_current_team` | 获取当前企业/团队信息（只读） |
+| `pingcode_get_current_user` | 获取当前用户（只读）；应用身份下自动降级为配置的默认负责人 |
+| `pingcode_get_team_members` | 查询企业成员列表（只读），支持关键字 + 部门 ID（≤20）过滤、分页 |
 | `pingcode_list_bugs` | 拉取缺陷列表 |
 | `pingcode_list_requirements` | 拉取需求清单 |
 | `pingcode_list_my_bugs` | 按 `PINGCODE_DEFAULT_ASSIGNEE_NAME` 拉取我的缺陷 |
@@ -280,7 +283,39 @@ PingCode 评论资源使用 `principal_type=work_item` 和工作项 ID 绑定。
 搜本周更新过的、状态是已修复的缺陷和需求
 ```
 
-对应 `pingcode_search_work_items`，一次跨缺陷+需求搜索，支持 `stateNames` / `priorityNames` / `assigneeNames` / `keywords` / `updatedAfter` / `updatedBefore` / 分页。`updatedAfter` / `updatedBefore` 映射为 PingCode 服务端 `updated_between` 过滤。
+对应 `pingcode_search_work_items`，一次跨缺陷+需求搜索，支持 `stateNames` / `priorityNames` / `assigneeNames` / `keywords` / `updatedAfter` / `updatedBefore` / 分页。`updatedAfter` / `updatedBefore` 映射为 PingCode 服务端 `updated_between` 过滤。结果按工作项 `id` 去重。
+
+#### raw 过滤（精确按 ID）
+
+当已知确切 ID 时，可在统一搜索里直接传 raw 过滤，与按名称过滤可同时使用：
+
+- **ID 列表（数组，每个字段 ≤20）**：`projectIds` / `typeIds` / `parentIds` / `assigneeIds` / `stateIds` / `priorityIds` / `tagIds` / `sprintIds` / `boardIds` / `entryIds` / `swimlaneIds` / `phaseIds` / `versionIds` / `createdByIds`。其中 `projectIds` / `typeIds` / `stateIds` / `priorityIds` / `assigneeIds` 会与对应的 name 解析结果合并、去重，并截断到 ≤20。
+- **单值**：`participantId`（参与人）。
+- **时间范围**：`createdBetween` / `startBetween` / `endBetween`，格式为秒级时间戳 `起,止`，支持单边，如 `1700000000,` 或 `,1700000000`。
+- **布尔**：`includeDeleted` / `includeArchived`，默认 `false`。
+
+示例：
+
+```json
+{
+  "kinds": ["bug"],
+  "assigneeNames": ["张夏"],
+  "sprintIds": ["6xxxxxxxxxxxxxxxxxxxxxxx"],
+  "createdBetween": "1717200000,1717804800"
+}
+```
+
+自然语言示例：
+
+```text
+查张夏名下、某个迭代里、本周创建的缺陷
+看技术部有哪些成员
+当前连的是哪个企业
+```
+
+- 「查张夏名下、某迭代、本周创建的缺陷」→ `pingcode_search_work_items`（`assigneeNames` + `sprintIds` + `createdBetween`）。
+- 「看技术部有哪些成员」→ `pingcode_get_team_members`（`keywords` 或 `departmentIds`）。
+- 「当前连的是哪个企业」→ `pingcode_get_current_team`。
 
 ### 先看流转计划再改
 
