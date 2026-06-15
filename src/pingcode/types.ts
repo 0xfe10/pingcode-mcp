@@ -1,0 +1,114 @@
+export interface PageResponse<T> {
+  page_size: number;
+  page_index: number;
+  total: number;
+  values: T[];
+}
+
+export interface PingCodeRef {
+  id: string;
+  url?: string;
+  name?: string;
+  display_name?: string;
+  type?: string;
+  color?: string;
+}
+
+export interface PingCodeProject {
+  id: string;
+  url?: string;
+  name: string;
+  identifier?: string;
+  type?: string;
+}
+
+export interface WorkItemType {
+  id: string;
+  url?: string;
+  name: string;
+  group?: string;
+}
+
+export interface WorkItemState {
+  id: string;
+  url?: string;
+  name: string;
+  type?: string;
+  color?: string;
+}
+
+export interface WorkItemPriority {
+  id: string;
+  url?: string;
+  name: string;
+}
+
+export interface ProjectMember {
+  id: string;
+  type?: string;
+  user?: PingCodeRef;
+  name?: string;
+  display_name?: string;
+}
+
+export interface PingCodeComment {
+  id: string;
+  url?: string;
+  content?: string;
+  is_deleted?: number | boolean;
+  is_reply_comment?: boolean;
+  replied_comment?: {
+    id: string;
+    url?: string;
+    content?: string;
+    is_deleted?: number | boolean;
+  };
+  created_at?: number;
+  created_by?: PingCodeRef;
+  updated_at?: number;
+  updated_by?: PingCodeRef;
+}
+
+export interface WorkItem {
+  id: string;
+  url?: string;
+  html_url?: string;
+  identifier?: string;
+  title?: string;
+  description?: string;
+  type?: WorkItemType | PingCodeRef;
+  state?: WorkItemState | PingCodeRef;
+  priority?: WorkItemPriority | PingCodeRef;
+  assignee?: PingCodeRef;
+  parent?: PingCodeRef;
+  created_at?: number;
+  updated_at?: number;
+  properties?: Record<string, unknown>;
+  public_image_token?: string | null;
+}
+
+export interface WorkItemPayload {
+  project_id?: string;
+  type_id?: string;
+  title?: string;
+  description?: string;
+  state_id?: string;
+  priority_id?: string;
+  assignee_id?: string;
+  parent_id?: string;
+  properties?: Record<string, unknown>;
+}
+
+export interface WorkItemListQuery {
+  identifier?: string;
+  project_ids?: string;
+  type_ids?: string;
+  state_ids?: string;
+  assignee_ids?: string;
+  priority_ids?: string;
+  keywords?: string;
+  updated_between?: string;
+  include_public_image_token?: boolean;
+  page_index?: number;
+  page_size?: number;
+}

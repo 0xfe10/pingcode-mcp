@@ -1,93 +1,280 @@
-# pingcode-mcp
+# PingCode MCP
 
+PingCode MCP 是一个公司内部可复用的 MCP Server，用于让 Cursor / Claude Code / Codex 等客户端通过自然语言读取和维护 PingCode 项目工作项。
 
+你的项目可以通过环境变量配置。按当前需求，内部使用时可填：
 
-## Getting started
+- 租户：`https://<your-domain>.pingcode.com`
+- 项目标识：`<PROJECT_KEY>`
+- 缺陷视图：`/pjm/projects/<PROJECT_KEY>/defect/<view_id>`
+- 需求视图：`/pjm/projects/<PROJECT_KEY>/backlog/<view_id>`
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## 能力
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- 拉取缺陷列表。
+- 拉取需求清单。
+- 按当前使用者默认负责人拉取“我的缺陷 / 我的需求”。
+- 解析富文本描述中的图片数量和图片源地址。
+- 从 `.xlsx` / `.csv` 导入缺陷。
+- 从 `.xlsx` / `.csv` 导入需求。
+- 修改单个缺陷状态。
+- 修复后批量把缺陷从 `新提交` 标记为 `已修复`。
+- 给缺陷/需求追加评论，或在标记已修复时顺带评论。
+- 修改单个需求状态。
+- 查询项目 schema：工作项类型、状态、优先级、成员。
 
-## Add your files
+## 安装
 
-* [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+```bash
+npm install
+npm run build
 ```
-cd existing_repo
-git remote add origin http://172.16.1.34/front_end/pingcode-mcp.git
-git branch -M main
-git push -uf origin main
+
+本地开发：
+
+```bash
+npm run dev
 ```
 
-## Integrate with your tools
+构建后运行：
 
-* [Set up project integrations](http://172.16.1.34/front_end/pingcode-mcp/-/settings/integrations)
+```bash
+npm start
+```
 
-## Collaborate with your team
+## 环境变量
 
-* [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+复制 `.env.example` 为 `.env`，或者在 MCP 客户端配置里设置 env。
 
-## Test and Deploy
+```bash
+PINGCODE_BASE_URL=https://your-domain.pingcode.com
+PINGCODE_API_BASE_URL=https://open.pingcode.com
+PINGCODE_CLIENT_ID=每个人自己的 Client ID
+PINGCODE_CLIENT_SECRET=每个人自己的 Client Secret
+# 也可以直接填官方 Open API access_token，二选一即可
+PINGCODE_ACCESS_TOKEN=
+PINGCODE_AUTH_SCHEME=Bearer
+PINGCODE_PROJECT_IDENTIFIER=PROJECT_KEY
+PINGCODE_DEFAULT_ASSIGNEE_NAME=每个人自己的 PingCode 展示名
+PINGCODE_BUG_TYPE_ID=bug
+PINGCODE_REQUIREMENT_TYPE_ID=
+PINGCODE_READONLY=false
+```
 
-Use the built-in continuous integration in GitLab.
+推荐使用 PingCode 后台创建的 `Client Credentials` 应用。不要提交真实 `.env`，不要把 `client_secret`、token、cookie 发到聊天里。
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+`PINGCODE_DEFAULT_ASSIGNEE_NAME` 用于“我的缺陷 / 我的需求”工具。每个同事填自己的 PingCode 展示名，例如 `张夏`、`林勇坚`。Client Credentials 是应用身份，不代表当前登录用户，所以这里必须显式配置默认负责人。
 
-***
+PingCode SaaS 的 Open API 地址使用 `https://open.pingcode.com`；私有化部署再按实际地址改成 `https://your-domain/open`。
 
-# Editing this README
+## 团队使用方式
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+每个同事本地配置同一个 MCP Server，但使用自己的环境变量：
 
-## Suggestions for a good README
+```json
+{
+  "PINGCODE_CLIENT_ID": "同事自己的 Client ID",
+  "PINGCODE_CLIENT_SECRET": "同事自己的 Client Secret",
+  "PINGCODE_DEFAULT_ASSIGNEE_NAME": "同事自己的 PingCode 展示名"
+}
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+配置后可以直接问：
 
-## Name
-Choose a self-explaining name for your project.
+```text
+拉取我的新提交缺陷
+拉取我的进行中需求
+把 MYM-123 从新提交改成已修复并评论：已修复，待回归
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+如果公司希望所有人共用一个应用凭据，也可以共用 `PINGCODE_CLIENT_ID/SECRET`，但 `PINGCODE_DEFAULT_ASSIGNEE_NAME` 仍然必须每个人单独填写。
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### 首次使用引导
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+当同事第一次使用或配置不完整时，让 AI 先调用：
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+```text
+检查 PingCode MCP 配置
+```
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+对应工具是 `pingcode_check_setup`。它会返回：
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+- 缺哪些环境变量。
+- 哪些信息可以直接在聊天框填写。
+- 哪些是敏感信息，只能填到本地 MCP env。
+- 每个信息在 PingCode 哪里找。
+- 可复制的 env 模板。
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+示例追问：
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```text
+我需要先完成 PingCode MCP 配置。请在聊天框告诉我：
+1. PingCode 租户地址，例如 https://xxx.pingcode.com
+2. 项目标识，例如 /pjm/projects/MYM/... 里的 MYM
+3. 你的 PingCode 展示名，也就是负责人列显示的名字
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Client ID / Client Secret 请去 PingCode 右上角头像 -> 管理后台 -> 凭据管理/凭证管理 -> 应用里查看，并填到本地 MCP env，不要发到公共聊天。
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## MCP 客户端配置
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+### 使用本地源码
 
-## License
-For open source projects, say how it is licensed.
+```json
+{
+  "mcpServers": {
+    "pingcode": {
+      "command": "node",
+      "args": ["/ABSOLUTE_PATH/pingcode-mcp/dist/index.js"],
+      "env": {
+        "PINGCODE_BASE_URL": "https://your-domain.pingcode.com",
+        "PINGCODE_API_BASE_URL": "https://open.pingcode.com",
+        "PINGCODE_CLIENT_ID": "每个人自己的 Client ID",
+        "PINGCODE_CLIENT_SECRET": "每个人自己的 Client Secret",
+        "PINGCODE_PROJECT_IDENTIFIER": "PROJECT_KEY",
+        "PINGCODE_DEFAULT_ASSIGNEE_NAME": "每个人自己的 PingCode 展示名"
+      }
+    }
+  }
+}
+```
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+### 发布 npm 包后
+
+```json
+{
+  "mcpServers": {
+    "pingcode": {
+      "command": "npx",
+      "args": ["-y", "@succaiss/pingcode-mcp"],
+      "env": {
+        "PINGCODE_BASE_URL": "https://your-domain.pingcode.com",
+        "PINGCODE_API_BASE_URL": "https://open.pingcode.com",
+        "PINGCODE_CLIENT_ID": "每个人自己的 Client ID",
+        "PINGCODE_CLIENT_SECRET": "每个人自己的 Client Secret",
+        "PINGCODE_PROJECT_IDENTIFIER": "PROJECT_KEY",
+        "PINGCODE_DEFAULT_ASSIGNEE_NAME": "每个人自己的 PingCode 展示名"
+      }
+    }
+  }
+}
+```
+
+## Tools
+
+| Tool | 说明 |
+| --- | --- |
+| `pingcode_check_setup` | 检查配置并返回聊天框追问清单、信息查找位置、env 模板 |
+| `pingcode_get_project_schema` | 获取项目、类型、状态、优先级、成员 |
+| `pingcode_list_bugs` | 拉取缺陷列表 |
+| `pingcode_list_requirements` | 拉取需求清单 |
+| `pingcode_list_my_bugs` | 按 `PINGCODE_DEFAULT_ASSIGNEE_NAME` 拉取我的缺陷 |
+| `pingcode_list_my_requirements` | 按 `PINGCODE_DEFAULT_ASSIGNEE_NAME` 拉取我的需求 |
+| `pingcode_import_bugs` | 导入缺陷表，默认 dry-run |
+| `pingcode_import_requirements` | 导入需求表，默认 dry-run |
+| `pingcode_update_bug_status` | 修改单个缺陷状态 |
+| `pingcode_mark_bugs_fixed` | 修复后批量把缺陷从 `新提交` 标记为 `已修复`，默认 dry-run |
+| `pingcode_add_work_item_comment` | 给缺陷/需求追加评论，默认 dry-run |
+| `pingcode_list_work_item_comments` | 获取缺陷/需求评论列表 |
+| `pingcode_update_requirement_status` | 修改单个需求状态 |
+
+## 表格模板
+
+缺陷表字段：
+
+```text
+编号, 标题, 状态, 优先级, 负责人, 父工作项, 描述
+```
+
+需求表字段：
+
+```text
+编号, 标题, 状态, 负责人, 优先级, 父工作项, 需求类型, 创建时间, 描述
+```
+
+示例文件在 `examples/` 目录。
+
+## 富文本图片
+
+`pingcode_list_bugs` / `pingcode_list_requirements` 会返回 `imageCount` 和 `imageSources`，用于识别详情描述里的图片。
+
+图片二进制下载需要 PingCode 的 `public_image_token`。SaaS Open API 可通过 `includePublicImageToken=true` 请求该字段，但在部分 `Client Credentials` 场景下 PingCode 可能返回 `null`。这种情况下需要使用已登录用户态页面生成的临时图片 token 下载，且不要把 token 写入表格、日志或聊天。
+
+## 修复后变更状态
+
+修完 bug 后推荐使用 `pingcode_mark_bugs_fixed`，默认只处理当前状态仍为 `新提交` 的缺陷，并把目标状态设为 `已修复`。
+
+先 dry-run：
+
+```json
+{
+  "identifiers": ["MYM-505", "MYM-503"],
+  "dryRun": true
+}
+```
+
+确认计划无误后再执行：
+
+```json
+{
+  "identifiers": ["MYM-505", "MYM-503"],
+  "comment": "已修复，相关改动已提交，待回归验证。",
+  "dryRun": false
+}
+```
+
+如果某条缺陷已经不是 `新提交`，工具会跳过并返回 skipped，避免覆盖同事已经处理过的状态。
+
+## 评论
+
+单独追加评论时，先 dry-run：
+
+```json
+{
+  "kind": "bug",
+  "identifier": "MYM-505",
+  "content": "已修复，待回归验证。",
+  "dryRun": true
+}
+```
+
+确认后再执行：
+
+```json
+{
+  "kind": "bug",
+  "identifier": "MYM-505",
+  "content": "已修复，待回归验证。",
+  "dryRun": false
+}
+```
+
+PingCode 评论资源使用 `principal_type=work_item` 和工作项 ID 绑定。若 `Client Credentials` 写评论返回权限不足，需要在 PingCode 后台确认评论写入权限，或改用支持用户身份的授权方式。
+
+## 安全策略
+
+- `client_secret` 和 token 只从环境变量读取。
+- 返回结果不包含 `client_secret`、token、cookie。
+- 导入默认 `dryRun=true`。
+- `PINGCODE_READONLY=true` 时禁止创建和更新。
+- 批量状态更新默认 `dryRun=true`，并支持当前状态保护。
+
+## 发布到 mcp.so
+
+mcp.so 只发布通用说明，不要发布公司内网 GitLab、租户地址、token。
+
+建议描述：
+
+```text
+PingCode MCP server for project work items. It supports listing bugs and requirements, importing .xlsx/.csv work item tables, resolving project schema, and updating work item status. Users configure their own PingCode base URL and Client Credentials or official access token through environment variables.
+```
+
+## GitLab 建议
+
+建议使用独立仓库，而不是放在前端仓库：
+
+```text
+http://<gitlab-host>/<group>/pingcode-mcp.git
+```
+
+前端仓库 `front_end/antview-frontend.git` 可以在 README 中引用这个 MCP，但不建议承载 MCP 源码。
