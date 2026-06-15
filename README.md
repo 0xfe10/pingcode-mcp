@@ -24,7 +24,8 @@ PingCode MCP 是一个公司内部可复用的 MCP Server，用于让 Cursor / C
 - 查询项目 schema：工作项类型、状态、优先级、成员。
 - 获取单条工作项完整详情（描述/图片/时间/父项/属性/可选评论）。
 - 统一搜索缺陷+需求（状态/优先级/负责人/关键词/更新时间范围/分页）。
-- 只读预览状态变更计划；安全编辑字段；一句话分诊（triage）。
+- 只读预览状态变更计划（基于工作流预检合法流转）；安全编辑字段；一句话分诊（triage）。
+- 单条创建缺陷/需求；按编号原生批量改优先级/负责人/状态。
 
 ## 安装
 
@@ -185,6 +186,8 @@ Client ID / Client Secret 请去 PingCode 右上角头像 -> 管理后台 -> 凭
 | `pingcode_plan_status_change` | 只读返回状态变更计划（当前/目标/可用状态/保护条件），永不执行 |
 | `pingcode_update_work_item_fields` | 安全编辑字段（标题/描述/优先级/负责人/父项/属性），默认 dry-run |
 | `pingcode_triage_work_item` | 组合分诊：改负责人+优先级+状态+评论，默认 dry-run |
+| `pingcode_create_work_item` | 单条创建缺陷/需求（标题必填 + 描述/优先级/负责人/父项/属性），默认 dry-run |
+| `pingcode_bulk_update_work_items` | 按编号批量改优先级/负责人/状态（原生 bulk，≤100，planned/skipped/failed），默认 dry-run |
 
 ## 表格模板
 
@@ -305,6 +308,26 @@ MYM-455 想改成已验收，先给我看会发生什么
 
 对应 `pingcode_triage_work_item`，把改负责人 + 改优先级 + 改状态合并为一次 PATCH，再追加评论。`expectedCurrentStatusName` 不匹配则整单拒绝、不部分执行。
 
+### 单条创建
+
+```text
+新建一个 bug：登录页验证码不刷新，优先级最高，指派给张夏
+```
+
+对应 `pingcode_create_work_item`，按标题（必填）+ 描述/优先级/负责人/父项/属性创建一条缺陷或需求。`dryRun=true`（默认）只回创建计划；确认后传 `dryRun:false` 落库，返回新工作项编号。`statusName` 建议不传，由 PingCode 用类型默认初始态，避免初始状态被工作流校验拒绝。
+
+### 原生批量更新
+
+```text
+把 MYM-505 MYM-503 MYM-501 批量改成已修复，只动当前还是处理中的
+```
+
+对应 `pingcode_bulk_update_work_items`，用 PingCode 原生 bulk 端点（单次 ≤100）批量改优先级/负责人/状态。沿用 `planned/skipped/failed` 模式，`expectedCurrentStatusName` 不匹配的条目自动跳过，防止覆盖同事改动。`dryRun=true`（默认）只回计划；每个变更字段执行时各发一次 bulk 请求。
+
+### 状态流转预检（已升级）
+
+`pingcode_plan_status_change` 现在会基于 PingCode 工作流（`work_item_state_plans` + `work_item_state_flows`）返回 `allowedTransitions`（当前状态可合法流转到的目标）与 `transitionAllowed`（请求的目标是否被允许）。解析不到状态方案时回退为列出全部状态，并在 `note` 标注未能预检。本工具仍为只读。
+
 ## triage 评论模板
 
 供 `comment` 字段直接复制，`{}` 为占位变量，按上下文填充：
@@ -329,7 +352,7 @@ MYM-455 想改成已验收，先给我看会发生什么
 - 导出 Markdown / CSV / JSON 工具。
 - 图片安全下载工具（受控目录/大小，过滤外链）。
 - AI prompt 模板工具（评论/周报/triage）。
-- 批量改字段（沿用 `mark_bugs_fixed` 的 planned/skipped/failed 模式）。
+- 关系/依赖（blocks/duplicates/relates）、个人统一工作台、迭代/版本/标签/关注人、附件上下传（PingCode 均有原生 API，待按需实现）。
 
 ### P2
 
