@@ -99,6 +99,26 @@ export interface WorkItemPayload {
   properties?: Record<string, unknown>;
 }
 
+export interface BulkUpdatePayload {
+  ids: string[];
+  property_name: string;
+  property_value: string;
+}
+
+export interface WorkItemStatePlan {
+  id: string;
+  name?: string;
+  project_type?: string;
+  work_item_type?: string;
+}
+
+export interface WorkItemStateFlow {
+  id?: string;
+  from_state_id?: string;
+  to_state_id?: string;
+  to_state?: { id: string; name?: string };
+}
+
 export interface WorkItemListQuery {
   identifier?: string;
   project_ids?: string;

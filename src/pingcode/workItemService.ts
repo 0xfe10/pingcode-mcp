@@ -62,6 +62,33 @@ export interface BatchStatusUpdateOptions {
   dryRun?: boolean;
 }
 
+export interface CreateWorkItemOptions {
+  kind: WorkItemKind;
+  title: string;
+  description?: string;
+  priorityName?: string;
+  assigneeName?: string;
+  statusName?: string;
+  parent?: string;
+  properties?: Record<string, unknown>;
+  dryRun?: boolean;
+  projectIdentifier?: string;
+  projectId?: string;
+}
+
+export interface BulkUpdateWorkItemsOptions {
+  kind: WorkItemKind;
+  identifiers: string[];
+  priorityName?: string;
+  assigneeName?: string;
+  statusName?: string;
+  stateId?: string;
+  expectedCurrentStatusName?: string;
+  dryRun?: boolean;
+  projectIdentifier?: string;
+  projectId?: string;
+}
+
 export interface CommentOptions {
   kind: WorkItemKind;
   workItemId?: string;
@@ -225,6 +252,39 @@ export class WorkItemService {
     return this.client.updateWorkItem(workItemId, payload);
   }
 
+  async createWorkItem(options: CreateWorkItemOptions) {
+    const schema = await this.getKindSchema(options.kind, {
+      projectIdentifier: options.projectIdentifier,
+      projectId: options.projectId,
+    });
+
+    const payload: WorkItemPayload = {
+      project_id: schema.project.id,
+      type_id: schema.type.id,
+      title: options.title,
+    };
+    if (options.description !== undefined) payload.description = options.description;
+    if (options.priorityName) payload.priority_id = this.resolveNamed(options.priorityName, schema.priorities, "优先级").id;
+    if (options.assigneeName) payload.assignee_id = this.resolveMember(options.assigneeName, schema.members).id;
+    if (options.parent) payload.parent_id = await this.resolveParentId(options.parent, schema.project.id);
+    if (options.statusName) payload.state_id = this.resolveNamed(options.statusName, schema.states, "状态").id;
+    if (options.properties !== undefined) payload.properties = options.properties;
+
+    const plan = {
+      project: { id: schema.project.id, identifier: schema.project.identifier, name: schema.project.name },
+      type: { id: schema.type.id, name: schema.type.name },
+      payload,
+    };
+
+    const result = await this.runMutation(options.dryRun ?? true, async () => ({
+      plan,
+      noChange: false,
+      execute: async () => ({ created: summarizeWorkItem(await this.client.createWorkItem(payload), this.config.baseUrl) }),
+    }));
+
+    return { dryRun: result.dryRun, plan, created: result.executed?.created };
+  }
+
   async updateStatus(options: StatusUpdateOptions) {
     const schema = await this.getKindSchema(options.kind, {
       projectIdentifier: options.projectIdentifier,
@@ -319,6 +379,77 @@ export class WorkItemService {
     }
 
     return result;
+  }
+
+  async bulkUpdateWorkItems(options: BulkUpdateWorkItemsOptions) {
+    const schema = await this.getKindSchema(options.kind, {
+      projectIdentifier: options.projectIdentifier,
+      projectId: options.projectId,
+    });
+
+    // 把目标值（名转 id）解析成原生 bulk 端点要求的 {property_name, property_value} 列表。
+    const fields: { field: string; property_name: string; property_value: string }[] = [];
+    if (options.priorityName) {
+      fields.push({ field: "priority", property_name: "priority_id", property_value: this.resolveNamed(options.priorityName, schema.priorities, "优先级").id });
+    }
+    if (options.assigneeName) {
+      fields.push({ field: "assignee", property_name: "assignee_id", property_value: this.resolveMember(options.assigneeName, schema.members).id });
+    }
+    if (options.stateId || options.statusName) {
+      const stateId = options.stateId ?? this.resolveNamed(options.statusName, schema.states, "状态").id;
+      const toStatus = schema.states.find(state => state.id === stateId)?.name ?? options.statusName;
+      fields.push({ field: `status(${toStatus ?? stateId})`, property_name: "state_id", property_value: stateId });
+    }
+    if (fields.length === 0) {
+      throw new Error("至少要提供一个目标字段：priorityName、assigneeName、statusName 或 stateId。");
+    }
+
+    const identifiers = [...new Set(options.identifiers.map(value => value.trim()).filter(Boolean))];
+    const changes = fields.map(({ field, property_name, property_value }) => ({ field, property_name, property_value }));
+    const dryRun = options.dryRun ?? true;
+    const planned: unknown[] = [];
+    const skipped: unknown[] = [];
+    const failed: unknown[] = [];
+    const eligibleIds: string[] = [];
+
+    for (const identifier of identifiers) {
+      try {
+        const item = await this.findByIdentifier(identifier, schema.project.id, schema.type.id);
+        if (!item) {
+          failed.push({ identifier, error: "未找到工作项" });
+          continue;
+        }
+        const currentStatus = item.state?.name;
+        if (options.expectedCurrentStatusName && currentStatus !== options.expectedCurrentStatusName) {
+          skipped.push({ identifier, currentStatus, reason: `当前状态不是 ${options.expectedCurrentStatusName}` });
+          continue;
+        }
+        planned.push({ identifier, id: item.id, fromStatus: currentStatus, changes });
+        eligibleIds.push(item.id);
+      } catch (error) {
+        failed.push({ identifier, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+
+    if (dryRun) {
+      return { dryRun, total: identifiers.length, planned, skipped, failed, fields: changes };
+    }
+
+    assertWritable(this.config);
+
+    const executed: { field: string; idCount: number; ok: boolean; error?: string }[] = [];
+    if (eligibleIds.length > 0) {
+      for (const { field, property_name, property_value } of fields) {
+        try {
+          await this.client.bulkUpdateWorkItems(eligibleIds, property_name, property_value);
+          executed.push({ field, idCount: eligibleIds.length, ok: true });
+        } catch (error) {
+          executed.push({ field, idCount: eligibleIds.length, ok: false, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+    }
+
+    return { dryRun, total: identifiers.length, planned, skipped, failed, fields: changes, executed };
   }
 
   async listComments(options: ListCommentOptions) {
@@ -424,6 +555,8 @@ export class WorkItemService {
       ? currentStatus === options.expectedCurrentStatusName
       : undefined;
 
+    const workflow = await this.resolveLegalTransitions(schema, currentStateId, toStateId);
+
     return {
       target: summarizeWorkItem(item, this.config.baseUrl),
       currentStatus,
@@ -431,11 +564,68 @@ export class WorkItemService {
       toStatus,
       toStateId,
       availableStates: schema.states.map(state => ({ id: state.id, name: state.name })),
+      allowedTransitions: workflow.allowedTransitions,
+      transitionAllowed: workflow.transitionAllowed,
       expectedCurrentStatusName: options.expectedCurrentStatusName,
       expectedSatisfied,
       willChange: wantsChange && toStateId !== currentStateId,
-      note: "PingCode 无工作流校验端点，目标转换是否被允许需以实际 PATCH 为准。",
+      note: workflow.note,
     };
+  }
+
+  /**
+   * 基于状态方案 + 工作流流转，预检当前状态可达的合法目标状态（保持只读）。
+   * 解析不到方案 / 任一查询失败时整体回退，仅置 allowedTransitions=undefined 并标注未预检，不让 plan 报错。
+   */
+  private async resolveLegalTransitions(
+    schema: SchemaContext,
+    currentStateId: string | undefined,
+    toStateId: string | undefined,
+  ): Promise<{
+    allowedTransitions?: { id: string; name?: string }[];
+    transitionAllowed?: boolean;
+    note: string;
+  }> {
+    const fallback = {
+      allowedTransitions: undefined,
+      transitionAllowed: undefined,
+      note: "未能解析状态方案，无法预检合法流转，目标以实际 PATCH 为准。",
+    };
+
+    if (!currentStateId) return fallback;
+
+    try {
+      const plans = await this.client.getWorkItemStatePlans(schema.project.id);
+      const projectType = schema.project.type;
+      const typeId = schema.type.id;
+      const typeName = schema.type.name;
+      const plan = plans.find(p => {
+        const typeMatch = p.work_item_type === typeId || p.work_item_type === typeName;
+        const projectMatch = projectType ? p.project_type === projectType : true;
+        return typeMatch && projectMatch;
+      });
+      if (!plan) return fallback;
+
+      const flows = await this.client.getWorkItemStateFlows(plan.id, currentStateId);
+      const allowedTransitions = flows
+        .map((flow): { id: string; name?: string } | undefined => {
+          const id = flow.to_state?.id ?? flow.to_state_id;
+          if (!id) return undefined;
+          const name = flow.to_state?.name ?? schema.states.find(state => state.id === id)?.name;
+          return { id, name };
+        })
+        .filter((entry): entry is { id: string; name?: string } => entry !== undefined);
+
+      const transitionAllowed = toStateId ? allowedTransitions.some(entry => entry.id === toStateId) : undefined;
+
+      return {
+        allowedTransitions,
+        transitionAllowed,
+        note: "已基于工作流预检合法流转。",
+      };
+    } catch {
+      return fallback;
+    }
   }
 
   async updateWorkItemFields(options: UpdateWorkItemFieldsOptions) {

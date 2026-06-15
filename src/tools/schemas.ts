@@ -51,6 +51,37 @@ export const planStatusChangeSchema = {
   ...projectScope,
 };
 
+export const createWorkItemSchema = {
+  kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("工作项类型，默认 bug。"),
+  title: z.string().min(1).describe("工作项标题（必填）。"),
+  description: z.string().optional().describe("描述（支持 PingCode 富文本/文本）。"),
+  priorityName: z.string().optional().describe("优先级名称，如 普通、较高、最高。"),
+  assigneeName: z.string().optional().describe("负责人姓名。"),
+  statusName: z
+    .string()
+    .optional()
+    .describe("初始状态名；不传则用类型默认初始态（推荐不传，避免流转校验失败）。"),
+  parent: z.string().optional().describe("父工作项编号或内部 ID。"),
+  properties: z.record(z.unknown()).optional().describe("自定义属性键值对。"),
+  dryRun: z.boolean().default(true).optional().describe("默认 true，仅返回创建计划；传 false 才真正创建。"),
+  ...projectScope,
+};
+
+export const bulkUpdateWorkItemsSchema = {
+  kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("工作项类型，默认 bug。"),
+  identifiers: z.array(z.string()).min(1).max(100).describe("要批量更新的工作项编号列表，≤100。"),
+  priorityName: z.string().optional().describe("目标优先级名称。"),
+  assigneeName: z.string().optional().describe("目标负责人姓名。"),
+  statusName: z.string().optional().describe("目标状态名称。"),
+  stateId: z.string().optional().describe("目标状态 ID；提供后优先于 statusName。"),
+  expectedCurrentStatusName: z
+    .string()
+    .optional()
+    .describe("当前状态保护：不匹配的条目被跳过。"),
+  dryRun: z.boolean().default(true).optional().describe("默认 true，仅返回计划；传 false 才执行。"),
+  ...projectScope,
+};
+
 export const updateWorkItemFieldsSchema = {
   kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("工作项类型，默认 bug。"),
   ...workItemLocator,

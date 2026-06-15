@@ -1,5 +1,6 @@
 import type { PingCodeConfig } from "../config.js";
 import type {
+  BulkUpdatePayload,
   PageResponse,
   PingCodeComment,
   PingCodeProject,
@@ -9,6 +10,8 @@ import type {
   WorkItemPayload,
   WorkItemPriority,
   WorkItemState,
+  WorkItemStateFlow,
+  WorkItemStatePlan,
   WorkItemType,
 } from "./types.js";
 
@@ -94,6 +97,22 @@ export class PingCodeClient {
     return page.values;
   }
 
+  async getWorkItemStatePlans(projectId: string): Promise<WorkItemStatePlan[]> {
+    const page = await this.request<PageResponse<WorkItemStatePlan>>("GET", "/v1/project/work_item_state_plans", {
+      query: { project_id: projectId },
+    });
+    return page.values;
+  }
+
+  async getWorkItemStateFlows(statePlanId: string, fromStateId: string): Promise<WorkItemStateFlow[]> {
+    const page = await this.request<PageResponse<WorkItemStateFlow>>(
+      "GET",
+      `/v1/project/work_item_state_plans/${encodeURIComponent(statePlanId)}/work_item_state_flows`,
+      { query: { from_state_id: fromStateId } },
+    );
+    return page.values;
+  }
+
   async listWorkItems(query: WorkItemListQuery): Promise<PageResponse<WorkItem>> {
     return this.request("GET", "/v1/project/work_items", {
       query: {
@@ -116,6 +135,11 @@ export class PingCodeClient {
 
   async updateWorkItem(workItemId: string, payload: WorkItemPayload): Promise<WorkItem> {
     return this.request("PATCH", `/v1/project/work_items/${encodeURIComponent(workItemId)}`, { body: payload });
+  }
+
+  async bulkUpdateWorkItems(ids: string[], propertyName: string, propertyValue: string): Promise<void> {
+    const body: BulkUpdatePayload = { ids, property_name: propertyName, property_value: propertyValue };
+    await this.request("PATCH", "/v1/project/work_items", { body });
   }
 
   async listWorkItemComments(workItemId: string): Promise<PageResponse<PingCodeComment>> {

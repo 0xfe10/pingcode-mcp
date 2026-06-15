@@ -8,6 +8,8 @@ import { summarizeWorkItem, WorkItemService } from "./pingcode/workItemService.j
 import { errorResult, textResult } from "./tools/format.js";
 import { importWorkItems } from "./tools/importWorkItems.js";
 import {
+  bulkUpdateWorkItemsSchema,
+  createWorkItemSchema,
   getWorkItemSchema,
   planStatusChangeSchema,
   searchWorkItemsSchema,
@@ -427,6 +429,41 @@ server.registerTool(
   async args => {
     try {
       const result = await service.updateWorkItemFields({ ...args, kind: args.kind ?? "bug" });
+      return textResult({ ok: true, ...result });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_bulk_update_work_items",
+  {
+    title: "Bulk Update PingCode Work Items",
+    description:
+      "用原生批量端点为多个工作项编号批量改优先级/负责人/状态。默认 dryRun=true，支持 expectedCurrentStatusName 跳过不匹配项；每个变更字段各发一次 bulk PATCH。",
+    inputSchema: bulkUpdateWorkItemsSchema,
+  },
+  async args => {
+    try {
+      const result = await service.bulkUpdateWorkItems({ ...args, kind: args.kind ?? "bug" });
+      return textResult({ ok: true, ...result });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_create_work_item",
+  {
+    title: "Create PingCode Work Item",
+    description: "创建单个缺陷/需求，必填标题，可选描述、优先级、负责人、父项、初始状态、属性。默认 dryRun=true，仅返回创建计划。",
+    inputSchema: createWorkItemSchema,
+  },
+  async args => {
+    try {
+      const result = await service.createWorkItem({ ...args, kind: args.kind ?? "bug" });
       return textResult({ ok: true, ...result });
     } catch (error) {
       return errorResult(error);
