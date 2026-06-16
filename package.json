@@ -1,14 +1,36 @@
 {
   "name": "@succaiss/pingcode-mcp",
   "version": "0.2.0",
-  "description": "MCP server for PingCode project work items, defects, requirements, imports, and status updates.",
+  "description": "MCP server for PingCode: detail, search, create, edit, status/triage, bulk, relations, comments, my-work, directory and user-mode OAuth for project work items.",
   "type": "module",
+  "license": "MIT",
+  "author": "succAIss",
+  "homepage": "https://github.com/YOUR_GH/pingcode-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_GH/pingcode-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_GH/pingcode-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "pingcode",
+    "project-management",
+    "issue-tracker",
+    "work-items",
+    "bug-tracker",
+    "oauth"
+  ],
   "bin": {
     "pingcode-mcp": "./dist/index.js"
   },
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
     ".env.example",
     "examples"
   ],
