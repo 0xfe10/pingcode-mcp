@@ -6,3 +6,4 @@ exports/
 !.env.example
 *.log
 .DS_Store
+team-mcp-config.json
