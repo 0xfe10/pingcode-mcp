@@ -4,7 +4,7 @@
 
 前端、后端、AI 项目仓库分散，团队需要一个独立 MCP 工具，让同事可以在 Cursor / Claude Code / Codex 等客户端中统一读取和维护 PingCode 缺陷与需求清单。
 
-当前用户提供的 PingCode 项目为 `蚂蚁面系统`，项目标识为 `<PROJECT_KEY>`：
+当前用户提供的 PingCode 项目为 `示例项目`，项目标识为 `<PROJECT_KEY>`：
 
 - 缺陷视图：`/pjm/projects/<PROJECT_KEY>/defect/<view_id>`
 - 需求视图：`/pjm/projects/<PROJECT_KEY>/backlog/<view_id>`

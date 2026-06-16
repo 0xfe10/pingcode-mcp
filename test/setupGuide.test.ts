@@ -12,7 +12,7 @@ test("缺凭据 → nextStep.code === configure_credentials", () => {
 });
 
 test("凭据齐备 + 项目就绪 → nextStep.code === authorize", () => {
-  const config = makeConfig({ clientId: "cid", clientSecret: "sec", projectIdentifier: "MYM" });
+  const config = makeConfig({ clientId: "cid", clientSecret: "sec", projectIdentifier: "PROJ" });
   const guide = buildSetupGuide(config);
   assert.equal(guide.nextStep.code, "authorize");
 });

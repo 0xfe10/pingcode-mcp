@@ -83,7 +83,7 @@ export function makeConfig(overrides: Partial<PingCodeConfig> = {}): PingCodeCon
     apiBaseUrl: "https://open.pingcode.com",
     authScheme: "Bearer",
     authTokenPath: tempAuthPath("cfg"),
-    projectIdentifier: "MYM",
+    projectIdentifier: "PROJ",
     bugTypeId: "bug",
     readonly: false,
     timeoutMs: 5000,

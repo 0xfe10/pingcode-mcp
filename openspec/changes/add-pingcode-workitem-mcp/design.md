@@ -15,7 +15,7 @@ AI Client
 
 | Capability | PingCode API |
 | --- | --- |
-| Resolve project | `GET /v1/project/projects?identifier=MYM` |
+| Resolve project | `GET /v1/project/projects?identifier=PROJ` |
 | Work item types | `GET /v1/project/work_item/types?project_id=...` |
 | States | `GET /v1/project/work_item/states?project_id=...&work_item_type_id=...` |
 | Priorities | `GET /v1/project/work_item/priorities?project_id=...` |

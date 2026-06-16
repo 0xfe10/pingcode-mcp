@@ -84,7 +84,7 @@ const importSchema = {
 
 const statusSchema = {
   workItemId: z.string().optional().describe("PingCode 工作项内部 ID。"),
-  identifier: z.string().optional().describe("工作项编号，如 MYM-455。"),
+  identifier: z.string().optional().describe("工作项编号，如 PROJ-455。"),
   statusName: z.string().optional().describe("目标状态名称，如 挂起、已验收、打开、进行中。"),
   stateId: z.string().optional().describe("目标状态 ID；提供后优先于 statusName。"),
   expectedCurrentStatusName: z.string().optional().describe("可选：当前状态保护条件，不匹配则拒绝更新。"),
@@ -95,7 +95,7 @@ const statusSchema = {
 };
 
 const markBugsFixedSchema = {
-  identifiers: z.array(z.string()).min(1).max(100).describe("要变更状态的缺陷编号列表，如 MYM-505、MYM-503。"),
+  identifiers: z.array(z.string()).min(1).max(100).describe("要变更状态的缺陷编号列表，如 PROJ-505、PROJ-503。"),
   statusName: z.string().default("已修复").optional().describe("目标状态，默认 已修复。"),
   stateId: z.string().optional().describe("目标状态 ID；提供后优先于 statusName。"),
   expectedCurrentStatusName: z.string().default("新提交").optional().describe("当前状态保护条件，默认只处理 新提交。"),
@@ -108,7 +108,7 @@ const markBugsFixedSchema = {
 const commentSchema = {
   kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("工作项类型，默认 bug。"),
   workItemId: z.string().optional().describe("PingCode 工作项内部 ID。"),
-  identifier: z.string().optional().describe("工作项编号，如 MYM-505。"),
+  identifier: z.string().optional().describe("工作项编号，如 PROJ-505。"),
   content: z.string().min(1).describe("评论内容，支持 PingCode 评论富文本/文本内容。"),
   dryRun: z.boolean().default(true).optional().describe("默认 true，仅返回计划；传 false 才真正写评论。"),
   projectIdentifier: z.string().optional(),
@@ -118,7 +118,7 @@ const commentSchema = {
 const listCommentSchema = {
   kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("工作项类型，默认 bug。"),
   workItemId: z.string().optional().describe("PingCode 工作项内部 ID。"),
-  identifier: z.string().optional().describe("工作项编号，如 MYM-505。"),
+  identifier: z.string().optional().describe("工作项编号，如 PROJ-505。"),
   projectIdentifier: z.string().optional(),
   projectId: z.string().optional(),
 };
@@ -290,7 +290,7 @@ server.registerTool(
   "pingcode_list_bugs",
   {
     title: "List PingCode Bugs",
-    description: "拉取 PingCode 缺陷列表，默认项目为 MYM。",
+    description: "拉取 PingCode 缺陷列表，默认项目为 PROJ。",
     inputSchema: commonListSchema,
   },
   async args => {
@@ -313,7 +313,7 @@ server.registerTool(
   "pingcode_list_requirements",
   {
     title: "List PingCode Requirements",
-    description: "拉取 PingCode 需求清单，默认项目为 MYM。",
+    description: "拉取 PingCode 需求清单，默认项目为 PROJ。",
     inputSchema: commonListSchema,
   },
   async args => {

@@ -10,16 +10,16 @@ function page<T>(values: T[], total?: number, pageIndex = 0, pageSize = 30) {
   return { page_size: pageSize, page_index: pageIndex, total: total ?? values.length, values };
 }
 
-/** 默认 schema：项目 MYM / bug 类型 / 两个状态 / 两个优先级 / 一个成员。 */
+/** 默认 schema：项目 PROJ / bug 类型 / 两个状态 / 两个优先级 / 一个成员。 */
 function schemaResponder(req: RecordedRequest): StubResponse | undefined {
   const { url } = req;
   if (url.includes("/v1/project/projects/") && url.includes("/members")) {
     return {
-      json: page([{ id: "m1", user: { id: "user-zhang", display_name: "张夏", name: "zhangxia" } }]),
+      json: page([{ id: "m1", user: { id: "user-zhang", display_name: "张三", name: "zhangxia" } }]),
     };
   }
   if (url.includes("/v1/project/projects")) {
-    return { json: page([{ id: "proj-1", identifier: "MYM", name: "项目" }]) };
+    return { json: page([{ id: "proj-1", identifier: "PROJ", name: "项目" }]) };
   }
   if (url.includes("/v1/project/work_item/types")) {
     return {
@@ -74,7 +74,7 @@ test("updateWorkItemFields 默认 dryRun → 无写请求", async () => {
     const s = schemaResponder(req);
     if (s) return s;
     if (req.url.includes("/v1/project/work_items/")) {
-      return { json: { id: "wi-1", identifier: "MYM-1", title: "旧标题", state: { id: "s_new", name: "新提交" } } };
+      return { json: { id: "wi-1", identifier: "PROJ-1", title: "旧标题", state: { id: "s_new", name: "新提交" } } };
     }
     return undefined;
   });
@@ -96,7 +96,7 @@ test("triageWorkItem 默认 dryRun → 无写请求", async () => {
     const s = schemaResponder(req);
     if (s) return s;
     if (req.url.includes("/v1/project/work_items/")) {
-      return { json: { id: "wi-1", identifier: "MYM-1", title: "t", state: { id: "s_new", name: "新提交" } } };
+      return { json: { id: "wi-1", identifier: "PROJ-1", title: "t", state: { id: "s_new", name: "新提交" } } };
     }
     return undefined;
   });
@@ -135,12 +135,12 @@ test("bulkUpdateWorkItems 默认 dryRun → 无写请求", async () => {
     const s = schemaResponder(req);
     if (s) return s;
     if (req.url.includes("/v1/project/work_items")) {
-      return { json: page([{ id: "wi-1", identifier: "MYM-1", state: { id: "s_new", name: "新提交" } }]) };
+      return { json: page([{ id: "wi-1", identifier: "PROJ-1", state: { id: "s_new", name: "新提交" } }]) };
     }
     return undefined;
   });
   try {
-    const result = await service.bulkUpdateWorkItems({ kind: "bug", identifiers: ["MYM-1"], priorityName: "高" });
+    const result = await service.bulkUpdateWorkItems({ kind: "bug", identifiers: ["PROJ-1"], priorityName: "高" });
     assert.equal(result.dryRun, true);
     assert.equal(hasWriteRequest(stub.requests), false);
   } finally {
@@ -157,7 +157,7 @@ test("readonly=true + dryRun=false → 抛错含 READONLY 且无写请求", asyn
     const s = schemaResponder(req);
     if (s) return s;
     if (req.url.includes("/v1/project/work_items/")) {
-      return { json: { id: "wi-1", identifier: "MYM-1", title: "旧", state: { id: "s_new", name: "新提交" } } };
+      return { json: { id: "wi-1", identifier: "PROJ-1", title: "旧", state: { id: "s_new", name: "新提交" } } };
     }
     return undefined;
   });
@@ -184,7 +184,7 @@ test("searchWorkItems 合并去重 state_ids / tag_ids ≤20，并返回 truncat
     if (req.url.includes("/v1/project/work_items")) {
       workItemsQuery = req.url;
       // total 大于一页 → 触发 truncated。
-      return { json: page([{ id: "wi-1", identifier: "MYM-1", state: { id: "s_new", name: "新提交" } }], 100, 0, 30) };
+      return { json: page([{ id: "wi-1", identifier: "PROJ-1", state: { id: "s_new", name: "新提交" } }], 100, 0, 30) };
     }
     return undefined;
   });
@@ -212,7 +212,7 @@ test("searchWorkItems 合并去重 state_ids / tag_ids ≤20，并返回 truncat
 });
 
 test("getMyWork 按状态分组、跨 kind 去重、返回 truncated 字段", async () => {
-  const { service, store } = makeService({ defaultAssigneeName: "张夏" });
+  const { service, store } = makeService({ defaultAssigneeName: "张三" });
   const stub = installFetchStub(req => {
     const t = tokenResponder(req);
     if (t) return t;
@@ -223,8 +223,8 @@ test("getMyWork 按状态分组、跨 kind 去重、返回 truncated 字段", as
       return {
         json: page(
           [
-            { id: "wi-1", identifier: "MYM-1", state: { id: "s_new", name: "新提交" } },
-            { id: "wi-2", identifier: "MYM-2", state: { id: "s_done", name: "已完成" } },
+            { id: "wi-1", identifier: "PROJ-1", state: { id: "s_new", name: "新提交" } },
+            { id: "wi-2", identifier: "PROJ-2", state: { id: "s_done", name: "已完成" } },
           ],
           50,
           0,
@@ -236,7 +236,7 @@ test("getMyWork 按状态分组、跨 kind 去重、返回 truncated 字段", as
   });
   try {
     const result = await service.getMyWork({ kinds: ["bug", "requirement"] });
-    assert.equal(result.assigneeName, "张夏");
+    assert.equal(result.assigneeName, "张三");
     // 跨两个 kind 同样两条 id 去重 → total 2。
     assert.equal(result.total, 2);
     assert.equal(result.truncated, true);
@@ -260,7 +260,7 @@ test("planStatusChange 只读 → 无写请求", async () => {
       return { json: page([]) };
     }
     if (req.url.includes("/v1/project/work_items/")) {
-      return { json: { id: "wi-1", identifier: "MYM-1", state: { id: "s_new", name: "新提交" } } };
+      return { json: { id: "wi-1", identifier: "PROJ-1", state: { id: "s_new", name: "新提交" } } };
     }
     return undefined;
   });

@@ -9,7 +9,7 @@ export const projectScope = {
 /** 工作项定位片段：内部 ID 优先，否则按编号解析。 */
 export const workItemLocator = {
   workItemId: z.string().optional().describe("PingCode 工作项内部 ID，提供后优先于 identifier。"),
-  identifier: z.string().optional().describe("工作项编号，如 MYM-455。"),
+  identifier: z.string().optional().describe("工作项编号，如 PROJ-455。"),
 };
 
 export const getCurrentTeamSchema = {};
@@ -159,7 +159,7 @@ export const getMyWorkSchema = {
 export const linkWorkItemsSchema = {
   kind: z.enum(["bug", "requirement"]).default("bug").optional().describe("源工作项类型，默认 bug。"),
   ...workItemLocator,
-  targetIdentifier: z.string().optional().describe("目标工作项编号，如 MYM-456。"),
+  targetIdentifier: z.string().optional().describe("目标工作项编号，如 PROJ-456。"),
   targetWorkItemId: z.string().optional().describe("目标工作项内部 ID，提供后优先于 targetIdentifier。"),
   relationType: z
     .string()

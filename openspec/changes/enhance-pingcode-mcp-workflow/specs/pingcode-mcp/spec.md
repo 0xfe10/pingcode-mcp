@@ -10,7 +10,7 @@ The MCP server SHALL resolve a caller-provided identifier to the internal work i
 
 #### Scenario: Get detail by identifier
 
-- **WHEN** the caller invokes `pingcode_get_work_item` with `identifier=MYM-455`
+- **WHEN** the caller invokes `pingcode_get_work_item` with `identifier=PROJ-455`
 - **THEN** the server resolves the work item and returns title, description, state, priority, assignee, parent, properties, created_at, updated_at, and image metadata
 - **AND** does not expose the access token.
 
@@ -55,7 +55,7 @@ The MCP server SHALL indicate that PingCode does not validate workflow transitio
 
 #### Scenario: Plan a status change
 
-- **WHEN** the caller invokes `pingcode_plan_status_change` with `identifier=MYM-455` and `statusName=已修复`
+- **WHEN** the caller invokes `pingcode_plan_status_change` with `identifier=PROJ-455` and `statusName=已修复`
 - **THEN** the server returns the current status, resolved target state, and available states
 - **AND** sends no PATCH request.
 
