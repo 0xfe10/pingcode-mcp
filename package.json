@@ -5,13 +5,13 @@
   "type": "module",
   "license": "MIT",
   "author": "succAIss",
-  "homepage": "https://github.com/YOUR_GH/pingcode-mcp#readme",
+  "homepage": "https://github.com/frontendRicky/pingcode-mcp#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR_GH/pingcode-mcp.git"
+    "url": "git+https://github.com/frontendRicky/pingcode-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_GH/pingcode-mcp/issues"
+    "url": "https://github.com/frontendRicky/pingcode-mcp/issues"
   },
   "keywords": [
     "mcp",
