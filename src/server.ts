@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { loadConfig } from "./config.js";
+import { parseOAuthConfig } from "./oauth.js";
 import { AuthService } from "./pingcode/authService.js";
 import { AuthStore } from "./pingcode/authStore.js";
 import { summarizeWorkItem, WorkItemService } from "./pingcode/workItemService.js";
@@ -41,6 +42,20 @@ export function createPingCodeServer(config: PingCodeServerConfig = loadConfig()
   const authService = new AuthService(config, authStore);
 
   const server = new McpServer(pingCodeServerInfo);
+  const registerTool = server.registerTool.bind(server);
+  const oauthConfig = parseOAuthConfig();
+  server.registerTool = ((name, toolConfig, cb) => {
+    const securitySchemes = [{ type: "oauth2", scopes: oauthConfig.requiredScopes }];
+    const configWithAuth = {
+      ...toolConfig,
+      securitySchemes,
+      _meta: {
+        ...(toolConfig._meta ?? {}),
+        securitySchemes,
+      },
+    };
+    return registerTool(name, configWithAuth as typeof toolConfig, cb);
+  }) as typeof server.registerTool;
 
 const commonListSchema = {
   projectIdentifier: z.string().optional().describe("PingCode 项目标识，默认读取 PINGCODE_PROJECT_IDENTIFIER。"),
