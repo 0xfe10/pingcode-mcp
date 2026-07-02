@@ -59,9 +59,9 @@ npm run build
 npm run start:http
 ```
 
-默认监听 `127.0.0.1:3000`，可用 `PINGCODE_MCP_HOST`、`PINGCODE_MCP_PORT` 或 `PORT` 覆盖。健康检查为 `GET /healthz`，MCP 端点为 `GET/POST /mcp`。
+默认监听 `127.0.0.1:3000`，可用 `PINGCODE_MCP_HOST`、`PINGCODE_MCP_PORT` 或 `PORT` 覆盖。健康检查为 `GET /healthz`，MCP 端点为 `GET/POST /mcp`。OAuth resource metadata 为 `GET /.well-known/oauth-protected-resource/mcp`，授权页为 `GET /oauth/authorize`。
 
-远程部署时请放在受信网络、Ingress 鉴权或 API Gateway 之后；本服务包含写入 PingCode 的工具，建议首次上线设置 `PINGCODE_READONLY=true`。监听非 loopback 地址时必须设置 `PINGCODE_MCP_HTTP_TOKEN`，请求 `GET/POST /mcp` 时带上 `Authorization: Bearer <token>`；如确实由外层网关兜底，也可显式设置 `PINGCODE_MCP_ALLOW_UNAUTHENTICATED=true`。
+远程部署时请放在受信网络、Ingress 鉴权或 API Gateway 之后；本服务包含写入 PingCode 的工具，建议首次上线设置 `PINGCODE_READONLY=true`。监听非 loopback 地址时默认必须设置 `PINGCODE_MCP_HTTP_TOKEN`，请求 `GET/POST /mcp` 时带上 `Authorization: Bearer <token>`；如果设置 `PINGCODE_MCP_AUTH_MODE=stytch` 或 `stytch,token`，则可用 Stytch OAuth access token 调用；如确实由外层网关兜底，也可显式设置 `PINGCODE_MCP_ALLOW_UNAUTHENTICATED=true`。
 
 Docker 运行：
 
@@ -102,6 +102,30 @@ PINGCODE_READONLY=false
 `PINGCODE_DEFAULT_ASSIGNEE_NAME` 用于“我的缺陷 / 我的需求”工具。每个同事填自己的 PingCode 展示名，例如 `张三`、`李四`。Client Credentials 是应用身份，不代表当前登录用户，所以这里必须显式配置默认负责人。
 
 PingCode SaaS 的 Open API 地址使用 `https://open.pingcode.com`；私有化部署再按实际地址改成 `https://your-domain/open`。
+
+## ChatGPT / Stytch OAuth
+
+远程给 ChatGPT 使用时，推荐开启 Stytch OAuth：
+
+```bash
+PINGCODE_MCP_AUTH_MODE=stytch
+PINGCODE_MCP_PUBLIC_URL=https://your-mcp.example.com
+PINGCODE_MCP_STYTCH_OAUTH_DOMAIN=https://your-project.customers.stytch.com
+PINGCODE_MCP_STYTCH_OAUTH_PROJECT_ID=project-live-...
+PINGCODE_MCP_STYTCH_OAUTH_SECRET=secret-live-...
+PINGCODE_MCP_STYTCH_OAUTH_USER_ID=admin-or-service-user
+PINGCODE_MCP_STYTCH_OAUTH_CONSENT_PASSWORD=change-me
+PINGCODE_MCP_STYTCH_OAUTH_AUDIENCE=project-live-...
+```
+
+在 Stytch Connected Apps 中配置：
+
+- Authorization URL：`https://your-mcp.example.com/oauth/authorize`
+- Dynamic Client Registration：开启，用于 ChatGPT 注册 OAuth client
+- Access token audience：与 `PINGCODE_MCP_STYTCH_OAUTH_AUDIENCE` 一致；普通 Stytch Connected App token 通常使用 Project ID
+- Scopes：默认要求 `pingcode.read pingcode.write`，与 MCP 写工具保持一致
+
+`PINGCODE_MCP_STYTCH_OAUTH_CONSENT_PASSWORD` 用来保护内置授权页。pingcode-mcp 没有自己的用户登录系统，因此授权页不会信任浏览器传入的 `user_id`，只会使用服务端配置的 `PINGCODE_MCP_STYTCH_OAUTH_USER_ID`。Stytch project secret 只在服务端使用，不会写入页面。
 
 ## 鉴权方式
 

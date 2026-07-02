@@ -15,6 +15,16 @@ test("createPingCodeServer returns PingCode MCP server metadata", () => {
   });
 });
 
+test("createPingCodeServer attaches OAuth security metadata to tools", () => {
+  const server = createPingCodeServer(makeConfig());
+  const tools = (server as unknown as { _registeredTools: Record<string, { _meta?: Record<string, unknown> }> })
+    ._registeredTools;
+  const firstTool = tools.pingcode_get_current_team;
+  assert.deepEqual(firstTool._meta?.securitySchemes, [
+    { type: "oauth2", scopes: ["pingcode.read", "pingcode.write"] },
+  ]);
+});
+
 test("getHttpListenConfig defaults to loopback on port 3000", () => {
   const config = getHttpListenConfig({});
   assert.deepEqual(config, {
@@ -28,6 +38,42 @@ test("getHttpListenConfig requires token for non-loopback host", () => {
   assert.throws(
     () => getHttpListenConfig({ PINGCODE_MCP_HOST: "0.0.0.0" }),
     /PINGCODE_MCP_HTTP_TOKEN is required/,
+  );
+});
+
+test("getHttpListenConfig requires explicit unauthenticated opt-in for remote none mode", () => {
+  assert.throws(
+    () => getHttpListenConfig({ PINGCODE_MCP_HOST: "0.0.0.0", PINGCODE_MCP_AUTH_MODE: "none" }),
+    /PINGCODE_MCP_HTTP_TOKEN is required/,
+  );
+});
+
+test("getHttpListenConfig allows non-loopback host with Stytch auth", () => {
+  const config = getHttpListenConfig({
+    PINGCODE_MCP_HOST: "0.0.0.0",
+    PINGCODE_MCP_AUTH_MODE: "stytch",
+    PINGCODE_MCP_PUBLIC_URL: "https://mcp.example.com",
+    PINGCODE_MCP_STYTCH_OAUTH_DOMAIN: "https://project.customers.stytch.com",
+    PINGCODE_MCP_STYTCH_OAUTH_PROJECT_ID: "project-test",
+    PINGCODE_MCP_STYTCH_OAUTH_SECRET: "secret-test",
+    PINGCODE_MCP_STYTCH_OAUTH_USER_ID: "user-test",
+    PINGCODE_MCP_STYTCH_OAUTH_CONSENT_PASSWORD: "consent-test",
+  });
+  assert.deepEqual(config, {
+    host: "0.0.0.0",
+    port: 3000,
+    token: undefined,
+  });
+});
+
+test("getHttpListenConfig rejects incomplete remote Stytch auth", () => {
+  assert.throws(
+    () => getHttpListenConfig({
+      PINGCODE_MCP_HOST: "0.0.0.0",
+      PINGCODE_MCP_AUTH_MODE: "stytch",
+      PINGCODE_MCP_STYTCH_OAUTH_DOMAIN: "https://project.customers.stytch.com",
+    }),
+    /PINGCODE_MCP_PUBLIC_URL/,
   );
 });
 
