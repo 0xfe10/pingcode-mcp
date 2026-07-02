@@ -50,6 +50,26 @@ npm run dev
 npm start
 ```
 
+HTTP / Streamable HTTP 传输（远程 MCP）：
+
+```bash
+npm run dev:http
+# 或构建后
+npm run build
+npm run start:http
+```
+
+默认监听 `127.0.0.1:3000`，可用 `PINGCODE_MCP_HOST`、`PINGCODE_MCP_PORT` 或 `PORT` 覆盖。健康检查为 `GET /healthz`，MCP 端点为 `GET/POST /mcp`。
+
+远程部署时请放在受信网络、Ingress 鉴权或 API Gateway 之后；本服务包含写入 PingCode 的工具，建议首次上线设置 `PINGCODE_READONLY=true`。监听非 loopback 地址时必须设置 `PINGCODE_MCP_HTTP_TOKEN`，请求 `GET/POST /mcp` 时带上 `Authorization: Bearer <token>`；如确实由外层网关兜底，也可显式设置 `PINGCODE_MCP_ALLOW_UNAUTHENTICATED=true`。
+
+Docker 运行：
+
+```bash
+docker build -t pingcode-mcp .
+docker run --rm -p 3000:3000 --env-file .env -e PINGCODE_MCP_HTTP_TOKEN=change-me pingcode-mcp
+```
+
 ## 环境变量
 
 复制 `.env.example` 为 `.env`，或者在 MCP 客户端配置里设置 env。
