@@ -105,6 +105,9 @@ export class PingCodeClient {
     }
 
     const identifier = projectIdentifier ?? this.config.projectIdentifier;
+    if (!identifier) {
+      throw new Error("未配置 PingCode 项目标识；请传入 projectIdentifier/projectId，或设置 PINGCODE_PROJECT_IDENTIFIER。");
+    }
     const page = await this.listProjects(identifier);
     const project = page.values.find(item => item.identifier === identifier) ?? page.values[0];
     if (!project) {

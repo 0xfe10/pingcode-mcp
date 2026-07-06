@@ -13,7 +13,7 @@ export interface PingCodeConfig {
   oauthAuthorizeUrl?: string;
   oauthRedirectUri?: string;
   authTokenPath: string;
-  projectIdentifier: string;
+  projectIdentifier?: string;
   projectId?: string;
   defaultAssigneeName?: string;
   bugTypeId?: string;
@@ -62,7 +62,7 @@ export function loadConfig(): PingCodeConfig {
     oauthAuthorizeUrl: readOptional(process.env.PINGCODE_OAUTH_AUTHORIZE_URL) ?? `${baseUrl}/oauth2/authorize`,
     oauthRedirectUri: readOptional(process.env.PINGCODE_OAUTH_REDIRECT_URI),
     authTokenPath,
-    projectIdentifier: process.env.PINGCODE_PROJECT_IDENTIFIER ?? "PROJECT_KEY",
+    projectIdentifier: readOptional(process.env.PINGCODE_PROJECT_IDENTIFIER),
     projectId: readOptional(process.env.PINGCODE_PROJECT_ID),
     defaultAssigneeName: readOptional(process.env.PINGCODE_DEFAULT_ASSIGNEE_NAME),
     bugTypeId: readOptional(process.env.PINGCODE_BUG_TYPE_ID) || "bug",

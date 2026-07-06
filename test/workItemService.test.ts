@@ -66,6 +66,21 @@ function hasWriteRequest(requests: RecordedRequest[]): boolean {
   return requests.some(r => ["POST", "PATCH", "DELETE", "PUT"].includes(r.method));
 }
 
+test("missing projectIdentifier fails before querying placeholder project", async () => {
+  const { service, store } = makeService({ projectIdentifier: undefined });
+  const stub = installFetchStub(req => tokenResponder(req));
+  try {
+    await assert.rejects(
+      () => service.createWorkItem({ kind: "bug", title: "新缺陷" }),
+      /请传入 projectIdentifier\/projectId/,
+    );
+    assert.equal(stub.requests.some(req => req.url.includes("/v1/project/projects")), false);
+  } finally {
+    stub.restore();
+    store.clear();
+  }
+});
+
 test("updateWorkItemFields 默认 dryRun → 无写请求", async () => {
   const { service, store } = makeService();
   const stub = installFetchStub(req => {
