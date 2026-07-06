@@ -36,9 +36,274 @@ export const pingCodeServerInfo = {
   version: "0.1.0",
 };
 
-const defaultOutputSchema = z.object({
-  ok: z.boolean().optional(),
-}).passthrough();
+const unknownRecordSchema = z.record(z.string(), z.unknown());
+const unknownArraySchema = z.array(z.unknown());
+const workItemSummarySchema = z
+  .object({
+    id: z.string(),
+    identifier: z.string().optional(),
+    title: z.string().optional(),
+    state: z.string().optional(),
+    priority: z.string().optional(),
+    assignee: z.string().optional(),
+    imageCount: z.number(),
+    imageSources: z.array(z.string()),
+    url: z.string().optional(),
+  })
+  .passthrough();
+const pagedWorkItemsOutputSchema = z.object({
+  ok: z.boolean(),
+  total: z.number(),
+  pageIndex: z.number(),
+  pageSize: z.number(),
+  values: z.array(workItemSummarySchema),
+});
+const pagedWorkItemsWithAssigneeOutputSchema = pagedWorkItemsOutputSchema.extend({
+  assigneeName: z.string(),
+});
+const mutationPlanOutputSchema = z
+  .object({
+    ok: z.boolean(),
+    dryRun: z.boolean(),
+    plan: unknownRecordSchema.optional(),
+  })
+  .passthrough();
+const mutationListOutputSchema = z
+  .object({
+    ok: z.boolean(),
+    dryRun: z.boolean(),
+    total: z.number(),
+    planned: unknownArraySchema,
+    skipped: unknownArraySchema,
+    failed: unknownArraySchema,
+  })
+  .passthrough();
+const outputSchemas: Record<string, z.ZodTypeAny> = {
+  pingcode_get_project_schema: z.object({
+    ok: z.boolean(),
+    schema: unknownRecordSchema,
+  }),
+  pingcode_get_current_team: z.object({
+    ok: z.boolean(),
+    team: unknownRecordSchema,
+  }),
+  pingcode_get_current_user: z
+    .object({
+      ok: z.boolean(),
+      mode: z.enum(["user", "application"]),
+      user: unknownRecordSchema.optional(),
+      note: z.string().optional(),
+      defaultAssigneeName: z.string().nullable().optional(),
+      resolved: unknownRecordSchema.optional(),
+    })
+    .passthrough(),
+  pingcode_auth_login: z
+    .object({
+      ok: z.boolean(),
+      step: z.enum(["authorize", "logged_in"]),
+      authorizeUrl: z.string().optional(),
+      state: z.string().optional(),
+      instructions: z.array(z.string()).optional(),
+      user: unknownRecordSchema.optional(),
+    })
+    .passthrough(),
+  pingcode_auth_status: z
+    .object({
+      ok: z.boolean(),
+      mode: z.enum(["user", "env-token", "application"]),
+      hasUserToken: z.boolean(),
+      expiresInSeconds: z.number().optional(),
+      user: unknownRecordSchema.optional(),
+      note: z.string().optional(),
+    })
+    .passthrough(),
+  pingcode_auth_logout: z.object({
+    ok: z.boolean(),
+    cleared: z.boolean(),
+  }),
+  pingcode_get_team_members: z.object({
+    ok: z.boolean(),
+    total: z.number(),
+    pageIndex: z.number(),
+    pageSize: z.number(),
+    values: unknownArraySchema,
+  }),
+  pingcode_check_setup: z
+    .object({
+      ok: z.boolean(),
+      needsInput: z.boolean(),
+      authMode: z.enum(["access_token", "client_credentials", "missing"]),
+      nextStep: unknownRecordSchema,
+      mcpClientConfig: unknownRecordSchema,
+      missingFields: unknownArraySchema,
+      fields: unknownArraySchema,
+      userOauth: unknownRecordSchema,
+      chatBoxGuide: unknownRecordSchema,
+      copyableEnvTemplate: z.string(),
+    })
+    .passthrough(),
+  pingcode_list_bugs: pagedWorkItemsOutputSchema,
+  pingcode_list_requirements: pagedWorkItemsOutputSchema,
+  pingcode_list_my_bugs: pagedWorkItemsWithAssigneeOutputSchema,
+  pingcode_list_my_requirements: pagedWorkItemsWithAssigneeOutputSchema,
+  pingcode_import_bugs: z
+    .object({
+      ok: z.boolean(),
+      dryRun: z.boolean(),
+      mode: z.enum(["create", "update", "upsert"]),
+      filePath: z.string(),
+      sheetName: z.string().optional(),
+      totalRows: z.number(),
+      processedRows: z.number(),
+      schema: unknownRecordSchema,
+      planned: unknownArraySchema,
+      executed: unknownArraySchema,
+    })
+    .passthrough(),
+  pingcode_import_requirements: z
+    .object({
+      ok: z.boolean(),
+      dryRun: z.boolean(),
+      mode: z.enum(["create", "update", "upsert"]),
+      filePath: z.string(),
+      sheetName: z.string().optional(),
+      totalRows: z.number(),
+      processedRows: z.number(),
+      schema: unknownRecordSchema,
+      planned: unknownArraySchema,
+      executed: unknownArraySchema,
+    })
+    .passthrough(),
+  pingcode_update_bug_status: z
+    .object({
+      ok: z.boolean(),
+      dryRun: z.boolean(),
+      target: workItemSummarySchema,
+      fromStatus: z.string().optional(),
+      toStateId: z.string(),
+      toStatus: z.string().optional(),
+      updated: workItemSummarySchema.optional(),
+      comment: z.unknown().optional(),
+    })
+    .passthrough(),
+  pingcode_mark_bugs_fixed: mutationListOutputSchema.extend({
+    expectedCurrentStatusName: z.string().optional(),
+    toStateId: z.string(),
+    toStatus: z.string().optional(),
+    comment: z.string().optional(),
+    executed: unknownArraySchema,
+  }),
+  pingcode_add_work_item_comment: z
+    .object({
+      ok: z.boolean(),
+      dryRun: z.boolean(),
+      target: workItemSummarySchema,
+      content: z.string(),
+      comment: z.unknown().optional(),
+    })
+    .passthrough(),
+  pingcode_list_work_item_comments: z.object({
+    ok: z.boolean(),
+    target: workItemSummarySchema,
+    total: z.number(),
+    pageIndex: z.number(),
+    pageSize: z.number(),
+    values: unknownArraySchema,
+  }),
+  pingcode_update_requirement_status: z
+    .object({
+      ok: z.boolean(),
+      dryRun: z.boolean(),
+      target: workItemSummarySchema,
+      fromStatus: z.string().optional(),
+      toStateId: z.string(),
+      toStatus: z.string().optional(),
+      updated: workItemSummarySchema.optional(),
+      comment: z.unknown().optional(),
+    })
+    .passthrough(),
+  pingcode_get_work_item: z
+    .object({
+      ok: z.boolean(),
+      target: workItemSummarySchema.extend({
+        description: z.string().optional(),
+        createdAt: z.string().optional(),
+        updatedAt: z.string().optional(),
+        parent: unknownRecordSchema.optional(),
+        properties: z.unknown().optional(),
+      }),
+      comments: unknownRecordSchema.optional(),
+    })
+    .passthrough(),
+  pingcode_search_work_items: z.object({
+    ok: z.boolean(),
+    total: z.number(),
+    truncated: z.boolean(),
+    note: z.string().optional(),
+    byKind: unknownArraySchema,
+    values: z.array(workItemSummarySchema),
+  }),
+  pingcode_plan_status_change: z
+    .object({
+      ok: z.boolean(),
+      target: workItemSummarySchema,
+      currentStatus: z.string().optional(),
+      currentStateId: z.string().optional(),
+      toStatus: z.string().optional(),
+      toStateId: z.string().optional(),
+      availableStates: unknownArraySchema,
+      allowedTransitions: unknownArraySchema.optional(),
+      transitionAllowed: z.boolean().optional(),
+      expectedCurrentStatusName: z.string().optional(),
+      expectedSatisfied: z.boolean().optional(),
+      willChange: z.boolean(),
+      note: z.string(),
+    })
+    .passthrough(),
+  pingcode_update_work_item_fields: z
+    .object({
+      ok: z.boolean(),
+      dryRun: z.boolean(),
+      target: workItemSummarySchema,
+      payload: unknownRecordSchema,
+      changes: unknownArraySchema,
+      noChange: z.boolean(),
+      expectedSatisfied: z.boolean().optional(),
+      updated: workItemSummarySchema.optional(),
+    })
+    .passthrough(),
+  pingcode_bulk_update_work_items: mutationListOutputSchema.extend({
+    fields: unknownArraySchema,
+    executed: unknownArraySchema.optional(),
+  }),
+  pingcode_create_work_item: mutationPlanOutputSchema.extend({
+    created: workItemSummarySchema.optional(),
+  }),
+  pingcode_triage_work_item: mutationPlanOutputSchema.extend({
+    executed: unknownRecordSchema.optional(),
+  }),
+  pingcode_get_my_work: z.object({
+    ok: z.boolean(),
+    assigneeName: z.string(),
+    total: z.number(),
+    truncated: z.boolean(),
+    note: z.string().optional(),
+    byKind: unknownArraySchema,
+    groups: unknownArraySchema,
+  }),
+  pingcode_link_work_items: mutationPlanOutputSchema.extend({
+    created: z.unknown().optional(),
+  }),
+  pingcode_unlink_work_items: mutationPlanOutputSchema.extend({
+    deleted: z.unknown().optional(),
+  }),
+  pingcode_list_work_item_relations: z.object({
+    ok: z.boolean(),
+    target: workItemSummarySchema,
+    total: z.number(),
+    values: unknownArraySchema,
+  }),
+};
 
 const writeToolNames = new Set([
   "pingcode_import_bugs",
@@ -68,7 +333,7 @@ export function createPingCodeServer(config: PingCodeServerConfig = loadConfig()
     const securitySchemes = [{ type: "oauth2", scopes }];
     const configWithAuth = {
       ...toolConfig,
-      outputSchema: toolConfig.outputSchema ?? defaultOutputSchema,
+      outputSchema: toolConfig.outputSchema ?? outputSchemas[name],
       annotations: {
         ...(toolConfig.annotations ?? {}),
         readOnlyHint: !writeToolNames.has(name),

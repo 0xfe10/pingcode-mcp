@@ -6,6 +6,10 @@ import { createPingCodeServer, pingCodeServerInfo } from "../src/server.js";
 
 import { makeConfig } from "./helpers.js";
 
+function outputShapeKeys(tool: { outputSchema?: { _def?: { shape?: () => Record<string, unknown> } } }) {
+  return Object.keys(tool.outputSchema?._def?.shape?.() ?? {});
+}
+
 test("createPingCodeServer returns PingCode MCP server metadata", () => {
   const server = createPingCodeServer(makeConfig());
   assert.ok(server);
@@ -37,6 +41,27 @@ test("createPingCodeServer attaches ChatGPT metadata to tools", () => {
   assert.ok(writeTool.outputSchema);
   assert.equal(readTool.annotations?.readOnlyHint, true);
   assert.equal(writeTool.annotations?.readOnlyHint, false);
+});
+
+test("createPingCodeServer uses concrete output schemas for representative tools", () => {
+  const server = createPingCodeServer(makeConfig());
+  const tools = (server as unknown as {
+    _registeredTools: Record<string, { outputSchema?: { _def?: { shape?: () => Record<string, unknown> } } }>;
+  })._registeredTools;
+
+  for (const [name, tool] of Object.entries(tools)) {
+    assert.ok(tool.outputSchema, `${name} should declare an output schema`);
+    assert.ok(outputShapeKeys(tool).length > 1, `${name} should not use the generic ok-only schema`);
+  }
+  assert.deepEqual(outputShapeKeys(tools.pingcode_auth_logout).sort(), ["cleared", "ok"].sort());
+  assert.deepEqual(outputShapeKeys(tools.pingcode_list_bugs).sort(), [
+    "ok",
+    "pageIndex",
+    "pageSize",
+    "total",
+    "values",
+  ].sort());
+  assert.ok(outputShapeKeys(tools.pingcode_create_work_item).includes("dryRun"));
 });
 
 test("getHttpListenConfig defaults to loopback on port 3000", () => {
