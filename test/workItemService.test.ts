@@ -196,6 +196,45 @@ test("bulkUpdateWorkItems 默认 dryRun → 无写请求", async () => {
   }
 });
 
+test("addComment sends comment principal in body", async () => {
+  const { service, store } = makeService();
+  let commentRequest: RecordedRequest | undefined;
+  const stub = installFetchStub(req => {
+    const t = tokenResponder(req);
+    if (t) return t;
+    const s = schemaResponder(req);
+    if (s) return s;
+    if (req.url.includes("/v1/project/work_items")) {
+      return { json: page([{ id: "wi-1", identifier: "PROJ-1", title: "缺陷", state: { id: "s_new", name: "新提交" } }]) };
+    }
+    if (req.url.includes("/v1/comments") && req.method === "POST") {
+      commentRequest = req;
+      return { json: { id: "comment-1", content: "调研结果" } };
+    }
+    return undefined;
+  });
+  try {
+    const result = await service.addComment({
+      kind: "bug",
+      identifier: "PROJ-1",
+      content: "调研结果",
+      dryRun: false,
+    });
+    assert.equal(result.comment?.id, "comment-1");
+    assert.ok(commentRequest);
+    const url = new URL(commentRequest.url);
+    assert.equal(url.searchParams.has("principal_type"), false);
+    assert.deepEqual(commentRequest.body, {
+      principal_type: "work_item",
+      principal_id: "wi-1",
+      content: "调研结果",
+    });
+  } finally {
+    stub.restore();
+    store.clear();
+  }
+});
+
 test("readonly=true + dryRun=false → 抛错含 READONLY 且无写请求", async () => {
   const { service, store } = makeService({ readonly: true });
   const stub = installFetchStub(req => {

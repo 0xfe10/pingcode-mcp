@@ -277,11 +277,11 @@ export class PingCodeClient {
 
   async createWorkItemComment(workItemId: string, content: string): Promise<PingCodeComment> {
     return this.request("POST", "/v1/comments", {
-      query: {
+      body: {
         principal_type: "work_item",
         principal_id: workItemId,
+        content,
       },
-      body: { content },
     });
   }
 
