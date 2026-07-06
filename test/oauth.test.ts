@@ -166,7 +166,6 @@ test("Stytch authorize client submits user, PKCE, resource and consent", async (
         state: "state-test",
         nonce: "nonce-test",
         code_challenge: "challenge-test",
-        code_challenge_method: "S256",
         resources: ["https://mcp.example.com/mcp"],
         consent_granted: true,
       });

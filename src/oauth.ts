@@ -305,7 +305,6 @@ export function createStytchOAuthClient(config: {
         state: request.state,
         nonce: request.nonce,
         code_challenge: request.codeChallenge,
-        code_challenge_method: request.codeChallengeMethod,
         resources: request.resource ? [request.resource] : undefined,
         consent_granted: request.consentGranted,
       }),
