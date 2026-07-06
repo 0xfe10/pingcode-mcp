@@ -11,6 +11,13 @@ test("缺凭据 → nextStep.code === configure_credentials", () => {
   assert.equal(guide.nextStep.code, "configure_credentials");
 });
 
+test("缺项目 → setup 输出不包含 PROJECT_KEY 占位符", () => {
+  const config = makeConfig({ clientId: "cid", clientSecret: "sec", projectIdentifier: undefined });
+  const guide = buildSetupGuide(config);
+  assert.equal(guide.nextStep.code, "configure_project");
+  assert.equal(JSON.stringify(guide).includes("PROJECT_KEY"), false);
+});
+
 test("凭据齐备 + 项目就绪 → nextStep.code === authorize", () => {
   const config = makeConfig({ clientId: "cid", clientSecret: "sec", projectIdentifier: "PROJ" });
   const guide = buildSetupGuide(config);

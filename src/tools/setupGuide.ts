@@ -61,7 +61,7 @@ function buildConfigEnv(config: PingCodeConfig): Record<string, string> {
     PINGCODE_API_BASE_URL: config.apiBaseUrl || "https://open.pingcode.com",
     PINGCODE_CLIENT_ID: "<在此填写 Client ID，勿提交 Git>",
     PINGCODE_CLIENT_SECRET: "<在此填写 Client Secret，勿提交 Git>",
-    PINGCODE_PROJECT_IDENTIFIER: valueOrPlaceholder(config.projectIdentifier, ["PROJECT_KEY"], "PROJECT_KEY"),
+    PINGCODE_PROJECT_IDENTIFIER: valueOrPlaceholder(config.projectIdentifier, ["PROJECT_KEY"], ""),
     PINGCODE_OAUTH_REDIRECT_URI: config.oauthRedirectUri || "<与 PingCode 后台凭据管理一致的回调地址>",
     PINGCODE_OAUTH_AUTHORIZE_URL: config.oauthAuthorizeUrl || "https://your-domain.pingcode.com/oauth2/authorize",
   };
@@ -129,7 +129,7 @@ export function buildSetupGuide(config: PingCodeConfig) {
       requiredFor: "项目缺陷/需求查询",
       safeForChat: true,
       current: safeCurrent(config.projectIdentifier),
-      example: "PROJ",
+      example: "PROJ（多项目可留空，调用工具时传 projectIdentifier/projectId）",
       whereToFind: "进入项目后看地址栏：/pjm/projects/PROJ/... 中的 PROJ 就是项目标识。",
       chatPrompt: "请提供项目标识，例如项目地址 /pjm/projects/PROJ/... 里的 PROJ。",
     },
@@ -217,8 +217,12 @@ export function buildSetupGuide(config: PingCodeConfig) {
         ? {
             code: "configure_project",
             title: "配置项目标识",
-            detail: "在 env 里填写 PINGCODE_PROJECT_IDENTIFIER（项目地址 /pjm/projects/XXX/ 里的 XXX），保存后重启 MCP 会话。",
-            actions: ["在 mcpClientConfig 的 env 填写 PINGCODE_PROJECT_IDENTIFIER", "重启 MCP 会话"],
+            detail:
+              "如果只常用一个项目，可在 env 里填写 PINGCODE_PROJECT_IDENTIFIER；多项目场景可以保持为空，调用工具时传 projectIdentifier/projectId。",
+            actions: [
+              "单项目：在 mcpClientConfig 的 env 填写 PINGCODE_PROJECT_IDENTIFIER",
+              "多项目：保持为空，调用工具时传 projectIdentifier/projectId",
+            ],
           }
         : {
             code: "authorize",
@@ -252,7 +256,7 @@ export function buildSetupGuide(config: PingCodeConfig) {
       "PINGCODE_API_BASE_URL=https://open.pingcode.com",
       "PINGCODE_CLIENT_ID=",
       "PINGCODE_CLIENT_SECRET=",
-      "PINGCODE_PROJECT_IDENTIFIER=PROJECT_KEY",
+      "PINGCODE_PROJECT_IDENTIFIER=",
       "PINGCODE_DEFAULT_ASSIGNEE_NAME=",
       "PINGCODE_BUG_TYPE_ID=bug",
       "PINGCODE_REQUIREMENT_TYPE_ID=",
