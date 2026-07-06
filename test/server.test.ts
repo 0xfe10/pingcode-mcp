@@ -15,14 +15,28 @@ test("createPingCodeServer returns PingCode MCP server metadata", () => {
   });
 });
 
-test("createPingCodeServer attaches OAuth security metadata to tools", () => {
+test("createPingCodeServer attaches ChatGPT metadata to tools", () => {
   const server = createPingCodeServer(makeConfig());
-  const tools = (server as unknown as { _registeredTools: Record<string, { _meta?: Record<string, unknown> }> })
+  const tools = (server as unknown as {
+    _registeredTools: Record<string, {
+      _meta?: Record<string, unknown>;
+      outputSchema?: unknown;
+      annotations?: Record<string, unknown>;
+    }>;
+  })
     ._registeredTools;
-  const firstTool = tools.pingcode_get_current_team;
-  assert.deepEqual(firstTool._meta?.securitySchemes, [
+  const readTool = tools.pingcode_get_current_team;
+  const writeTool = tools.pingcode_create_work_item;
+  assert.deepEqual(readTool._meta?.securitySchemes, [
+    { type: "oauth2", scopes: ["pingcode.read"] },
+  ]);
+  assert.deepEqual(writeTool._meta?.securitySchemes, [
     { type: "oauth2", scopes: ["pingcode.read", "pingcode.write"] },
   ]);
+  assert.ok(readTool.outputSchema);
+  assert.ok(writeTool.outputSchema);
+  assert.equal(readTool.annotations?.readOnlyHint, true);
+  assert.equal(writeTool.annotations?.readOnlyHint, false);
 });
 
 test("getHttpListenConfig defaults to loopback on port 3000", () => {

@@ -36,6 +36,25 @@ export const pingCodeServerInfo = {
   version: "0.1.0",
 };
 
+const defaultOutputSchema = z.object({
+  ok: z.boolean().optional(),
+}).passthrough();
+
+const writeToolNames = new Set([
+  "pingcode_import_bugs",
+  "pingcode_import_requirements",
+  "pingcode_update_bug_status",
+  "pingcode_mark_bugs_fixed",
+  "pingcode_add_work_item_comment",
+  "pingcode_update_requirement_status",
+  "pingcode_update_work_item_fields",
+  "pingcode_bulk_update_work_items",
+  "pingcode_create_work_item",
+  "pingcode_triage_work_item",
+  "pingcode_link_work_items",
+  "pingcode_unlink_work_items",
+]);
+
 export function createPingCodeServer(config: PingCodeServerConfig = loadConfig()) {
   const authStore = new AuthStore(config.authTokenPath);
   const service = new WorkItemService(config, authStore);
@@ -45,9 +64,17 @@ export function createPingCodeServer(config: PingCodeServerConfig = loadConfig()
   const registerTool = server.registerTool.bind(server);
   const oauthConfig = parseOAuthConfig();
   server.registerTool = ((name, toolConfig, cb) => {
-    const securitySchemes = [{ type: "oauth2", scopes: oauthConfig.requiredScopes }];
+    const scopes = writeToolNames.has(name) ? oauthConfig.requiredScopes : ["pingcode.read"];
+    const securitySchemes = [{ type: "oauth2", scopes }];
     const configWithAuth = {
       ...toolConfig,
+      outputSchema: toolConfig.outputSchema ?? defaultOutputSchema,
+      annotations: {
+        ...(toolConfig.annotations ?? {}),
+        readOnlyHint: !writeToolNames.has(name),
+        destructiveHint: name === "pingcode_unlink_work_items",
+        openWorldHint: false,
+      },
       securitySchemes,
       _meta: {
         ...(toolConfig._meta ?? {}),
