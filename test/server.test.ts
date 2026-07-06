@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { getHttpListenConfig } from "../src/http.js";
 import { createPingCodeServer, pingCodeServerInfo } from "../src/server.js";
+import { errorResult, textResult } from "../src/tools/format.js";
 
 import { makeConfig } from "./helpers.js";
 
@@ -62,6 +63,22 @@ test("createPingCodeServer uses concrete output schemas for representative tools
     "values",
   ].sort());
   assert.ok(outputShapeKeys(tools.pingcode_create_work_item).includes("dryRun"));
+});
+
+test("tool formatter returns structured content for output schema validation", () => {
+  const value = { ok: true, team: { id: "team-1", name: "Team" } };
+  const result = textResult(value);
+
+  assert.deepEqual(result.structuredContent, value);
+  assert.equal(result.content[0]?.text, JSON.stringify(value, null, 2));
+});
+
+test("tool formatter marks caught errors as MCP tool errors", () => {
+  const result = errorResult(new Error("boom"));
+
+  assert.equal(result.isError, true);
+  assert.deepEqual(result.structuredContent, undefined);
+  assert.equal(result.content[0]?.text, JSON.stringify({ ok: false, error: "boom" }, null, 2));
 });
 
 test("getHttpListenConfig defaults to loopback on port 3000", () => {
