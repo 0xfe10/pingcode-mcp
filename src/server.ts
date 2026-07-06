@@ -737,7 +737,7 @@ server.registerTool(
   "pingcode_list_boards",
   {
     title: "List PingCode Boards",
-    description: "列出指定项目看板（只读），用于获取 boardIds 后进行搜索。",
+    description: "列出指定看板/Kanban 项目的看板（只读），用于获取 boardIds 后进行搜索；Scrum 项目通常不需要调用。",
     inputSchema: discoveryProjectScopeSchema,
   },
   async args => {
