@@ -65,6 +65,35 @@ test("createPingCodeServer uses concrete output schemas for representative tools
   assert.ok(outputShapeKeys(tools.pingcode_create_work_item).includes("dryRun"));
 });
 
+test("createPingCodeServer exposes curated PingCode discovery tools as read-only", () => {
+  const server = createPingCodeServer(makeConfig());
+  const tools = (server as unknown as {
+    _registeredTools: Record<string, {
+      _meta?: Record<string, unknown>;
+      annotations?: Record<string, unknown>;
+      outputSchema?: { _def?: { shape?: () => Record<string, unknown> } };
+    }>;
+  })._registeredTools;
+  const names = [
+    "pingcode_list_projects",
+    "pingcode_list_project_members",
+    "pingcode_list_work_item_types",
+    "pingcode_list_work_item_states",
+    "pingcode_list_work_item_priorities",
+    "pingcode_list_work_item_tags",
+    "pingcode_list_iterations",
+    "pingcode_list_boards",
+    "pingcode_list_relation_types",
+  ];
+
+  for (const name of names) {
+    assert.ok(tools[name], `${name} should be registered`);
+    assert.deepEqual(tools[name]._meta?.securitySchemes, [{ type: "oauth2", scopes: ["pingcode.read"] }]);
+    assert.equal(tools[name].annotations?.readOnlyHint, true);
+    assert.ok(outputShapeKeys(tools[name]).includes("values"), `${name} should return a values list`);
+  }
+});
+
 test("tool formatter returns structured content for output schema validation", () => {
   const value = { ok: true, team: { id: "team-1", name: "Team" } };
   const result = textResult(value);

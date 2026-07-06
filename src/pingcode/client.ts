@@ -44,6 +44,10 @@ export class PingCodeApiError extends Error {
 }
 
 type QueryValue = string | number | boolean | undefined;
+interface PageOptions {
+  pageIndex?: number;
+  pageSize?: number;
+}
 
 interface TokenResponse {
   access_token?: string;
@@ -73,12 +77,14 @@ export class PingCodeClient {
     private readonly authStore?: AuthStore,
   ) {}
 
-  async listProjects(identifier?: string): Promise<PageResponse<PingCodeProject>> {
+  async listProjects(options: { identifier?: string; includeArchived?: boolean; includeDeleted?: boolean } & PageOptions = {}): Promise<PageResponse<PingCodeProject>> {
     return this.request("GET", "/v1/project/projects", {
       query: {
-        identifier,
-        include_archived: false,
-        include_deleted: false,
+        identifier: options.identifier,
+        include_archived: options.includeArchived ?? false,
+        include_deleted: options.includeDeleted ?? false,
+        page_index: options.pageIndex,
+        page_size: options.pageSize,
       },
     });
   }
@@ -108,7 +114,7 @@ export class PingCodeClient {
     if (!identifier) {
       throw new Error("未配置 PingCode 项目标识；请传入 projectIdentifier/projectId，或设置 PINGCODE_PROJECT_IDENTIFIER。");
     }
-    const page = await this.listProjects(identifier);
+    const page = await this.listProjects({ identifier });
     const project = page.values.find(item => item.identifier === identifier) ?? page.values[0];
     if (!project) {
       throw new Error(`未找到 PingCode 项目：${identifier}`);
@@ -117,32 +123,71 @@ export class PingCodeClient {
   }
 
   async getWorkItemTypes(projectId: string): Promise<WorkItemType[]> {
-    const page = await this.request<PageResponse<WorkItemType>>("GET", "/v1/project/work_item/types", {
-      query: { project_id: projectId },
-    });
+    const page = await this.listWorkItemTypes(projectId);
     return page.values;
   }
 
-  async getWorkItemStates(projectId: string, typeId: string): Promise<WorkItemState[]> {
-    const page = await this.request<PageResponse<WorkItemState>>("GET", "/v1/project/work_item/states", {
-      query: { project_id: projectId, work_item_type_id: typeId },
+  async listWorkItemTypes(projectId: string, options: PageOptions = {}): Promise<PageResponse<WorkItemType>> {
+    return this.request<PageResponse<WorkItemType>>("GET", "/v1/project/work_item/types", {
+      query: { project_id: projectId, page_index: options.pageIndex, page_size: options.pageSize },
     });
+  }
+
+  async listWorkItemStates(projectId: string, typeId: string, options: PageOptions = {}): Promise<PageResponse<WorkItemState>> {
+    return this.request<PageResponse<WorkItemState>>("GET", "/v1/project/work_item/states", {
+      query: { project_id: projectId, work_item_type_id: typeId, page_index: options.pageIndex, page_size: options.pageSize },
+    });
+  }
+
+  async getWorkItemStates(projectId: string, typeId: string): Promise<WorkItemState[]> {
+    const page = await this.listWorkItemStates(projectId, typeId);
     return page.values;
   }
 
   async getWorkItemPriorities(projectId: string): Promise<WorkItemPriority[]> {
-    const page = await this.request<PageResponse<WorkItemPriority>>("GET", "/v1/project/work_item/priorities", {
-      query: { project_id: projectId },
-    });
+    const page = await this.listWorkItemPriorities(projectId);
     return page.values;
   }
 
+  async listWorkItemPriorities(projectId: string, options: PageOptions = {}): Promise<PageResponse<WorkItemPriority>> {
+    return this.request<PageResponse<WorkItemPriority>>("GET", "/v1/project/work_item/priorities", {
+      query: { project_id: projectId, page_index: options.pageIndex, page_size: options.pageSize },
+    });
+  }
+
   async getProjectMembers(projectId: string): Promise<ProjectMember[]> {
-    const page = await this.request<PageResponse<ProjectMember>>(
+    const page = await this.listProjectMembers(projectId);
+    return page.values;
+  }
+
+  async listProjectMembers(projectId: string, options: PageOptions = {}): Promise<PageResponse<ProjectMember>> {
+    return this.request<PageResponse<ProjectMember>>(
       "GET",
       `/v1/project/projects/${encodeURIComponent(projectId)}/members`,
+      { query: { page_index: options.pageIndex, page_size: options.pageSize } },
     );
-    return page.values;
+  }
+
+  async listWorkItemTags(projectId: string, options: PageOptions = {}): Promise<PageResponse<unknown>> {
+    return this.request<PageResponse<unknown>>("GET", "/v1/project/work_item/tags", {
+      query: { project_id: projectId, page_index: options.pageIndex, page_size: options.pageSize },
+    });
+  }
+
+  async listIterations(projectId: string, options: PageOptions = {}): Promise<PageResponse<unknown>> {
+    return this.request<PageResponse<unknown>>(
+      "GET",
+      `/v1/project/projects/${encodeURIComponent(projectId)}/sprints`,
+      { query: { page_index: options.pageIndex, page_size: options.pageSize } },
+    );
+  }
+
+  async listBoards(projectId: string, options: PageOptions = {}): Promise<PageResponse<unknown>> {
+    return this.request<PageResponse<unknown>>(
+      "GET",
+      `/v1/project/projects/${encodeURIComponent(projectId)}/boards`,
+      { query: { page_index: options.pageIndex, page_size: options.pageSize } },
+    );
   }
 
   async getWorkItemStatePlans(projectId: string): Promise<WorkItemStatePlan[]> {
@@ -193,6 +238,12 @@ export class PingCodeClient {
   async getRelationTypes(): Promise<RelationType[]> {
     const page = await this.request<PageResponse<RelationType>>("GET", "/v1/project/work_item/relation_types");
     return page.values;
+  }
+
+  async listRelationTypes(options: PageOptions = {}): Promise<PageResponse<RelationType>> {
+    return this.request<PageResponse<RelationType>>("GET", "/v1/project/work_item/relation_types", {
+      query: { page_index: options.pageIndex, page_size: options.pageSize },
+    });
   }
 
   async listWorkItemRelations(workItemId: string, relationType?: string): Promise<PageResponse<WorkItemRelation>> {

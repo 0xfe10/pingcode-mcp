@@ -81,6 +81,38 @@ test("missing projectIdentifier fails before querying placeholder project", asyn
   }
 });
 
+test("discovery helpers call PingCode project discovery endpoints", async () => {
+  const { service, store } = makeService();
+  const stub = installFetchStub(req => {
+    const t = tokenResponder(req);
+    if (t) return t;
+    if (req.url.includes("/v1/project/projects/proj-1/members")) return { json: page([{ id: "member-1" }]) };
+    if (req.url.includes("/v1/project/projects/proj-1/sprints")) return { json: page([{ id: "sprint-1" }]) };
+    if (req.url.includes("/v1/project/projects/proj-1/boards")) return { json: page([{ id: "board-1" }]) };
+    if (req.url.includes("/v1/project/work_item/types")) return { json: page([{ id: "bug", name: "缺陷" }]) };
+    if (req.url.includes("/v1/project/work_item/states")) return { json: page([{ id: "s-open", name: "打开" }]) };
+    if (req.url.includes("/v1/project/work_item/priorities")) return { json: page([{ id: "p-high", name: "高" }]) };
+    if (req.url.includes("/v1/project/work_item/tags")) return { json: page([{ id: "tag-1", tag: { name: "重要" } }]) };
+    if (req.url.includes("/v1/project/work_item/relation_types")) return { json: page([{ id: "relates", name: "关联" }]) };
+    if (req.url.includes("/v1/project/projects")) return { json: page([{ id: "proj-1", identifier: "PROJ", name: "项目" }]) };
+    return undefined;
+  });
+  try {
+    assert.equal((await service.listProjects({ pageSize: 100 })).values[0]?.identifier, "PROJ");
+    assert.equal((await service.listProjectMembers({ projectIdentifier: "PROJ" })).values[0]?.id, "member-1");
+    assert.equal((await service.listWorkItemTypes({ projectIdentifier: "PROJ" })).values[0]?.id, "bug");
+    assert.equal((await service.listWorkItemStates({ projectIdentifier: "PROJ", typeId: "bug" })).values[0]?.id, "s-open");
+    assert.equal((await service.listWorkItemPriorities({ projectIdentifier: "PROJ" })).values[0]?.id, "p-high");
+    assert.equal((await service.listWorkItemTags({ projectIdentifier: "PROJ" })).values[0]?.id, "tag-1");
+    assert.equal((await service.listIterations({ projectIdentifier: "PROJ" })).values[0]?.id, "sprint-1");
+    assert.equal((await service.listBoards({ projectIdentifier: "PROJ" })).values[0]?.id, "board-1");
+    assert.equal((await service.listRelationTypes()).values[0]?.id, "relates");
+  } finally {
+    stub.restore();
+    store.clear();
+  }
+});
+
 test("updateWorkItemFields 默认 dryRun → 无写请求", async () => {
   const { service, store } = makeService();
   const stub = installFetchStub(req => {

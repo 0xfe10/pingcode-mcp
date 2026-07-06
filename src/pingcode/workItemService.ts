@@ -26,6 +26,22 @@ export interface SchemaContext {
   members: ProjectMember[];
 }
 
+interface PageOptions {
+  pageIndex?: number;
+  pageSize?: number;
+}
+
+interface ProjectScopeOptions extends PageOptions {
+  projectIdentifier?: string;
+  projectId?: string;
+}
+
+interface ListProjectsOptions extends PageOptions {
+  identifier?: string;
+  includeArchived?: boolean;
+  includeDeleted?: boolean;
+}
+
 export interface ListOptions {
   projectIdentifier?: string;
   projectId?: string;
@@ -369,6 +385,50 @@ export class WorkItemService {
     } catch {
       return base;
     }
+  }
+
+  async listProjects(options: ListProjectsOptions = {}) {
+    return this.client.listProjects(options);
+  }
+
+  async listProjectMembers(options: ProjectScopeOptions = {}) {
+    const project = await this.resolveProject(options);
+    return this.client.listProjectMembers(project.id, options);
+  }
+
+  async listWorkItemTypes(options: ProjectScopeOptions = {}) {
+    const project = await this.resolveProject(options);
+    return this.client.listWorkItemTypes(project.id, options);
+  }
+
+  async listWorkItemStates(options: ProjectScopeOptions & { typeId?: string; kind?: WorkItemKind } = {}) {
+    const schema = await this.getKindSchema(options.kind ?? "bug", options);
+    const typeId = options.typeId ?? schema.type.id;
+    return this.client.listWorkItemStates(schema.project.id, typeId, options);
+  }
+
+  async listWorkItemPriorities(options: ProjectScopeOptions = {}) {
+    const project = await this.resolveProject(options);
+    return this.client.listWorkItemPriorities(project.id, options);
+  }
+
+  async listWorkItemTags(options: ProjectScopeOptions = {}) {
+    const project = await this.resolveProject(options);
+    return this.client.listWorkItemTags(project.id, options);
+  }
+
+  async listIterations(options: ProjectScopeOptions = {}) {
+    const project = await this.resolveProject(options);
+    return this.client.listIterations(project.id, options);
+  }
+
+  async listBoards(options: ProjectScopeOptions = {}) {
+    const project = await this.resolveProject(options);
+    return this.client.listBoards(project.id, options);
+  }
+
+  async listRelationTypes(options: PageOptions = {}) {
+    return this.client.listRelationTypes(options);
   }
 
   /**
@@ -1134,6 +1194,13 @@ export class WorkItemService {
 
   async getKindSchema(kind: WorkItemKind, options: { projectIdentifier?: string; projectId?: string; typeId?: string } = {}) {
     return this.getSchema(kind, options) as Promise<SchemaContext>;
+  }
+
+  private async resolveProject(options: { projectIdentifier?: string; projectId?: string } = {}): Promise<PingCodeProject> {
+    return this.client.resolveProject(
+      options.projectIdentifier ?? this.config.projectIdentifier,
+      options.projectId ?? this.config.projectId,
+    );
   }
 
   private resolveType(types: WorkItemType[], kind: WorkItemKind, explicitTypeId?: string): WorkItemType {

@@ -58,6 +58,13 @@ const pagedWorkItemsOutputSchema = z.object({
   pageSize: z.number(),
   values: z.array(workItemSummarySchema),
 });
+const pagedUnknownOutputSchema = z.object({
+  ok: z.boolean(),
+  total: z.number(),
+  pageIndex: z.number(),
+  pageSize: z.number(),
+  values: z.array(z.unknown()),
+});
 const pagedWorkItemsWithAssigneeOutputSchema = pagedWorkItemsOutputSchema.extend({
   assigneeName: z.string(),
 });
@@ -128,6 +135,15 @@ const outputSchemas: Record<string, z.ZodTypeAny> = {
     pageSize: z.number(),
     values: unknownArraySchema,
   }),
+  pingcode_list_projects: pagedUnknownOutputSchema,
+  pingcode_list_project_members: pagedUnknownOutputSchema,
+  pingcode_list_work_item_types: pagedUnknownOutputSchema,
+  pingcode_list_work_item_states: pagedUnknownOutputSchema,
+  pingcode_list_work_item_priorities: pagedUnknownOutputSchema,
+  pingcode_list_work_item_tags: pagedUnknownOutputSchema,
+  pingcode_list_iterations: pagedUnknownOutputSchema,
+  pingcode_list_boards: pagedUnknownOutputSchema,
+  pingcode_list_relation_types: pagedUnknownOutputSchema,
   pingcode_check_setup: z
     .object({
       ok: z.boolean(),
@@ -432,6 +448,17 @@ const listCommentSchema = {
   projectId: z.string().optional(),
 };
 
+const pageSchema = {
+  pageIndex: z.number().int().min(0).default(0).optional(),
+  pageSize: z.number().int().min(1).max(100).default(30).optional(),
+};
+
+const discoveryProjectScopeSchema = {
+  projectIdentifier: z.string().optional().describe("PingCode 项目标识；可先用 pingcode_list_projects 获取。"),
+  projectId: z.string().optional().describe("PingCode 项目 ID，提供后跳过项目标识查询。"),
+  ...pageSchema,
+};
+
 server.registerTool(
   "pingcode_get_project_schema",
   {
@@ -572,6 +599,168 @@ server.registerTool(
     try {
       const result = await service.listTeamMembers(args);
       return textResult({ ok: true, ...result });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_list_projects",
+  {
+    title: "List PingCode Projects",
+    description: "列出当前企业下的 PingCode 项目，返回项目 ID、项目标识 identifier、名称、类型和状态；用于多项目场景先发现 projectIdentifier。",
+    inputSchema: {
+      identifier: z.string().optional().describe("按项目标识精确过滤，如 AXY；不传则列出项目。"),
+      includeArchived: z.boolean().default(false).optional(),
+      includeDeleted: z.boolean().default(false).optional(),
+      ...pageSchema,
+    },
+  },
+  async args => {
+    try {
+      const page = await service.listProjects(args);
+      return textResult({ ok: true, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, values: page.values });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_list_project_members",
+  {
+    title: "List PingCode Project Members",
+    description: "列出指定项目成员（只读）。先用 pingcode_list_projects 获取 projectIdentifier/projectId。",
+    inputSchema: discoveryProjectScopeSchema,
+  },
+  async args => {
+    try {
+      const page = await service.listProjectMembers(args);
+      return textResult({ ok: true, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, values: page.values });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_list_work_item_types",
+  {
+    title: "List PingCode Work Item Types",
+    description: "列出指定项目可用工作项类型（只读），用于确认 bug/requirement/task 等类型 ID。",
+    inputSchema: discoveryProjectScopeSchema,
+  },
+  async args => {
+    try {
+      const page = await service.listWorkItemTypes(args);
+      return textResult({ ok: true, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, values: page.values });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_list_work_item_states",
+  {
+    title: "List PingCode Work Item States",
+    description: "列出指定项目和工作项类型下的状态（只读）。可传 typeId，未传时按 kind 默认解析。",
+    inputSchema: {
+      kind: z.enum(["bug", "requirement"]).default("bug").optional(),
+      typeId: z.string().optional().describe("工作项类型 ID；未传时按 kind 解析。"),
+      ...discoveryProjectScopeSchema,
+    },
+  },
+  async args => {
+    try {
+      const page = await service.listWorkItemStates(args);
+      return textResult({ ok: true, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, values: page.values });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_list_work_item_priorities",
+  {
+    title: "List PingCode Work Item Priorities",
+    description: "列出指定项目可用优先级（只读），用于按 priorityName/priorityId 查询或更新工作项。",
+    inputSchema: discoveryProjectScopeSchema,
+  },
+  async args => {
+    try {
+      const page = await service.listWorkItemPriorities(args);
+      return textResult({ ok: true, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, values: page.values });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_list_work_item_tags",
+  {
+    title: "List PingCode Work Item Tags",
+    description: "列出指定项目工作项标签（只读），用于获取 tagIds 后进行搜索。",
+    inputSchema: discoveryProjectScopeSchema,
+  },
+  async args => {
+    try {
+      const page = await service.listWorkItemTags(args);
+      return textResult({ ok: true, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, values: page.values });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_list_iterations",
+  {
+    title: "List PingCode Iterations",
+    description: "列出指定项目迭代/Sprint（只读），用于获取 sprintIds 后进行搜索。",
+    inputSchema: discoveryProjectScopeSchema,
+  },
+  async args => {
+    try {
+      const page = await service.listIterations(args);
+      return textResult({ ok: true, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, values: page.values });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_list_boards",
+  {
+    title: "List PingCode Boards",
+    description: "列出指定项目看板（只读），用于获取 boardIds 后进行搜索。",
+    inputSchema: discoveryProjectScopeSchema,
+  },
+  async args => {
+    try {
+      const page = await service.listBoards(args);
+      return textResult({ ok: true, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, values: page.values });
+    } catch (error) {
+      return errorResult(error);
+    }
+  },
+);
+
+server.registerTool(
+  "pingcode_list_relation_types",
+  {
+    title: "List PingCode Relation Types",
+    description: "列出工作项关系类型（只读），用于 pingcode_link_work_items 的 relationType。",
+    inputSchema: pageSchema,
+  },
+  async args => {
+    try {
+      const page = await service.listRelationTypes(args);
+      return textResult({ ok: true, total: page.total, pageIndex: page.page_index, pageSize: page.page_size, values: page.values });
     } catch (error) {
       return errorResult(error);
     }
